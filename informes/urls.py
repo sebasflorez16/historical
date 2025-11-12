@@ -4,6 +4,7 @@ URLs para la aplicación de informes
 
 from django.urls import path
 from . import views
+from .views_geocoding import geocode_proxy
 
 app_name = 'informes'
 
@@ -49,13 +50,7 @@ urlpatterns = [
     path('parcelas/<int:parcela_id>/datos-guardados/', views.ver_datos_guardados, name='ver_datos_guardados'),
     path('parcelas/<int:parcela_id>/sincronizar-eosda/', views.sincronizar_con_eosda, name='sincronizar_con_eosda'),
     
-    # Sprint 3: Configuración de reportes
-    path('parcelas/<int:parcela_id>/configurar-reporte/', views.configurar_reporte, name='configurar_reporte'),
-    path('api/calcular-costo/', views.calcular_costo_ajax, name='calcular_costo_ajax'),
-    
-    # Sprint 4: Dashboard de estadísticas
-    path('estadisticas/', views.dashboard_estadisticas, name='dashboard_estadisticas'),
-    
     # API endpoints
     path('api/parcelas/<int:parcela_id>/datos/', views.api_datos_parcela, name='api_datos_parcela'),
+    path('api/geocode/', geocode_proxy, name='geocode_proxy'),  # Proxy para evitar CORS
 ]

@@ -385,7 +385,7 @@ class EosdaAPIService:
                     'date_start': start_date,
                     'date_end': end_date,
                     'field_id': field_id,  # USAR FIELD_ID EN LUGAR DE GEOMETRY
-                    'sensors': ['S2_MSI_L2A'],  # Sentinel-2
+                    'sensors': ['S2L2A'],  # Sentinel-2
                     'reference': f'{indice}_{field_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
                     'limit': 50,  # Número de escenas
                     'max_cloud_cover_in_aoi': 80,
@@ -466,7 +466,7 @@ class EosdaAPIService:
                     'date_start': start_date,
                     'date_end': end_date,
                     'geometry': geojson,
-                    'sensors': ['S2_MSI_L2A'],  # Sentinel-2
+                    'sensors': ['S2L2A'],  # Sentinel-2
                     'reference': f'{indice}_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
                     'limit': 50,  # Número de escenas
                     'max_cloud_cover_in_aoi': 80,
@@ -502,9 +502,10 @@ class EosdaAPIService:
             logger.error(f"Error procesando {indice}: {str(e)}")
             return []
 
-    def _obtener_resultados_tarea(self, task_id: str, indice: str, max_intentos: int = 10) -> List[Dict]:
+    def _obtener_resultados_tarea(self, task_id: str, indice: str, max_intentos: int = 20) -> List[Dict]:
         """
         Obtiene los resultados de una tarea asíncrona de EOSDA Statistics
+        Aumentado a 20 intentos (100 segundos) para batch requests
         """
         try:
             url = f"{self.base_url}/api/gdw/api/{task_id}"
@@ -513,29 +514,42 @@ class EosdaAPIService:
                 response = self.session.get(url, timeout=30)
                 
                 if response.status_code != 200:
-                    logger.warning(f"Error consultando tarea {task_id}: {response.status_code}")
+                    logger.warning(f"❌ Error consultando tarea {task_id}: {response.status_code}")
+                    if response.status_code == 429:
+                        logger.warning(f"Rate limit alcanzado en intento {intento+1}/{max_intentos}")
+                        time.sleep(10)  # Esperar más en rate limit
+                        continue
                     return []
                 
                 data = response.json()
                 
+                # Debug: Ver el estado completo de la respuesta
+                logger.debug(f"Intento {intento+1}/{max_intentos} - Estado tarea: {data.get('status', 'unknown')}")
+                
                 # Verificar si hay resultados
                 if 'result' in data and data['result']:
-                    logger.info(f"Datos obtenidos para {indice}: {len(data['result'])} escenas")
+                    logger.info(f"✅ Datos obtenidos para {indice}: {len(data['result'])} escenas")
                     return self._procesar_datos_estadisticas(data['result'], indice)
+                
+                # Verificar si la tarea aún está procesando
+                status = data.get('status')
+                if status in ['pending', 'processing', 'running']:
+                    logger.info(f"⏳ Tarea {task_id} aún procesando... ({intento+1}/{max_intentos})")
                 
                 # Verificar si hay errores
                 if 'errors' in data and data['errors']:
-                    logger.warning(f"Errores en tarea {task_id}: {len(data['errors'])} errores")
+                    logger.error(f"❌ Errores en tarea {task_id}: {data['errors'][:200]}")
+                    return []
                 
-                # Esperar antes del siguiente intento (menos tiempo para desarrollo)
+                # Esperar antes del siguiente intento
                 if intento < max_intentos - 1:
-                    time.sleep(5)  # Esperar 5 segundos entre intentos
+                    time.sleep(5)  # 5 segundos entre intentos
             
-            logger.warning(f"Timeout esperando resultados para {indice}, tarea {task_id}")
+            logger.warning(f"⏱️ Timeout esperando resultados para {indice}, tarea {task_id}")
             return []
             
         except Exception as e:
-            logger.error(f"Error obteniendo resultados de tarea {task_id}: {str(e)}")
+            logger.error(f"❌ Error obteniendo resultados de tarea {task_id}: {str(e)}")
             return []
 
     def _procesar_datos_estadisticas(self, resultados: List[Dict], indice: str) -> List[Dict]:
@@ -587,6 +601,65 @@ class EosdaAPIService:
             
         except Exception as e:
             logger.error(f"Error procesando estadísticas para {indice}: {str(e)}")
+            return []
+    
+    def _obtener_resultados_tarea_lento(self, task_id: str, max_intentos: int = 15) -> List[Dict]:
+        """
+        Obtiene resultados de tarea con delays más largos para evitar rate limits.
+        Usa 10 segundos entre intentos (6 requests/minuto vs 10/minuto del API)
+        """
+        try:
+            url = f"{self.base_url}/api/gdw/api/{task_id}"
+            
+            for intento in range(max_intentos):
+                # Delay ANTES de cada petición (excepto la primera)
+                if intento > 0:
+                    logger.debug(f"⏳ Esperando 10s antes de intento {intento+1}...")
+                    time.sleep(10)  # 10 segundos entre peticiones
+                
+                response = self.session.get(url, timeout=30)
+                
+                if response.status_code != 200:
+                    if response.status_code == 429:
+                        logger.warning(f"⚠️ Rate limit en intento {intento+1}/{max_intentos}, esperando 15s...")
+                        time.sleep(15)
+                        continue
+                    logger.error(f"❌ Error {response.status_code} consultando tarea")
+                    return []
+                
+                data = response.json()
+                status = data.get('status', 'unknown')
+                
+                # Log de debug cada 3 intentos
+                if intento % 3 == 0:
+                    logger.debug(f"   Debug intento {intento+1}: status={status}, keys={list(data.keys())}")
+                
+                # Verificar si hay resultados
+                if 'result' in data and data['result']:
+                    logger.info(f"✅ Resultados obtenidos: {len(data['result'])} escenas")
+                    return data['result']
+                
+                # Verificar si está procesando
+                if status in ['pending', 'processing', 'running', 'unknown']:
+                    if status == 'unknown':
+                        logger.debug(f"   Status desconocido, continuando polling ({intento+1}/{max_intentos})")
+                    else:
+                        logger.info(f"   Procesando... ({intento+1}/{max_intentos}, status: {status})")
+                    continue
+                
+                # Verificar errores
+                if 'errors' in data and data['errors']:
+                    logger.error(f"❌ Errores en tarea: {data['errors'][:300]}")
+                    return []
+                
+                # Si no hay result ni está procesando, seguir intentando
+                logger.debug(f"   Status: {status}, sin resultados aún")
+            
+            logger.warning(f"⏱️ Timeout después de {max_intentos} intentos ({max_intentos * 10}s)")
+            return []
+            
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo resultados: {str(e)}")
             return []
     
     def _obtener_datos_climaticos(self, geojson: Dict, 
@@ -831,7 +904,7 @@ class EosdaAPIService:
                             [-74.1, 4.5]
                         ]]
                     },
-                    'sensors': ['S2_MSI_L2A'],
+                    'sensors': ['S2L2A'],
                     'reference': 'connectivity_test',
                     'limit': 1,
                     'max_cloud_cover_in_aoi': 100
@@ -862,29 +935,42 @@ class EosdaAPIService:
     
     # ========= MÉTODOS OPTIMIZADOS CON CACHÉ Y TRACKING =========
     
-    def obtener_datos_optimizado(self, field_id: str, fecha_inicio: date, fecha_fin: date,
-                                indices: List[str], usuario, parcela=None,
+    def obtener_datos_optimizado(self, parcela, fecha_inicio: date, fecha_fin: date,
+                                indices: List[str], usuario,
                                 max_nubosidad: int = 50) -> Dict:
         """
-        Método optimizado que:
+        Método optimizado usando Statistics API de EOSDA con geometría:
         1. Consulta caché primero (0 requests si existe)
-        2. Hace 1 SOLA petición para TODOS los índices
-        3. Registra estadísticas de uso
-        4. Guarda en caché para futuras consultas
+        2. Usa Statistics API con geometría (autenticación correcta)
+        3. Hace UNA petición con todos los índices
+        4. Polling con delays más largos para evitar rate limits
+        5. Guarda en caché para futuras consultas
         
         Args:
-            field_id: ID del campo en EOSDA
+            parcela: Parcela con geometría GeoJSON
             fecha_inicio: Fecha de inicio del análisis
             fecha_fin: Fecha de fin del análisis
             indices: Lista de índices a obtener ['ndvi', 'ndmi', 'savi']
             usuario: Usuario que hace la petición
-            parcela: Parcela asociada (opcional)
             max_nubosidad: Porcentaje máximo de nubes (30-50)
             
         Returns:
             Dict con los datos satelitales organizados por índice
         """
         from informes.models import CacheDatosEOSDA, EstadisticaUsoEOSDA
+        import json
+        
+        # Validar geometría y field_id
+        field_id = parcela.eosda_field_id or f"parcela_{parcela.id}"
+        
+        try:
+            geometria = json.loads(parcela.poligono_geojson) if parcela.poligono_geojson else None
+            if not geometria:
+                logger.error(f"❌ Parcela {parcela.nombre} no tiene geometría GeoJSON")
+                return {'error': 'Sin geometría', 'resultados': []}
+        except Exception as e:
+            logger.error(f"❌ Error parseando geometría: {e}")
+            return {'error': f'Error geometría: {str(e)}', 'resultados': []}
         
         tiempo_inicio = time.time()
         
@@ -917,22 +1003,25 @@ class EosdaAPIService:
             logger.info(f"✅ Datos obtenidos desde CACHÉ para field {field_id} - 0 requests consumidos")
             return datos_cache
         
-        # 2. NO HAY CACHÉ - HACER PETICIÓN A EOSDA
-        logger.info(f"🔍 No hay caché, consultando EOSDA para field {field_id} - {len(indices)} índices")
+        # 2. NO HAY CACHÉ - USAR STATISTICS API CON GEOMETRÍA
+        logger.info(f"🔍 No hay caché, usando Statistics API - {len(indices)} índices en 1 petición")
         
         try:
-            # UNA SOLA petición con TODOS los índices
+            # UNA petición con TODOS los índices usando geometría
             url = f"{self.base_url}/api/gdw/api"
+            
+            # Convertir índices a mayúsculas (requerido por EOSDA)
+            indices_mayusculas = [idx.upper() for idx in indices]
             
             payload = {
                 'type': 'mt_stats',
                 'params': {
-                    'bm_type': indices,  # ✅ TODOS los índices en una petición
+                    'bm_type': indices_mayusculas,  # NDVI, NDMI, SAVI en mayúsculas
                     'date_start': fecha_inicio.isoformat(),
                     'date_end': fecha_fin.isoformat(),
-                    'field_id': field_id,
-                    'sensors': ['S2_MSI_L2A'],
-                    'reference': f'optimized_{field_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
+                    'geometry': geometria,  # Usar geometría
+                    'sensors': ['S2L2A'],  # Sentinel-2 Level 2A
+                    'reference': f'stats_{field_id}_{datetime.now().strftime("%Y%m%d_%H%M")}',
                     'limit': 50,
                     'max_cloud_cover_in_aoi': max_nubosidad,
                     'exclude_cover_pixels': True,
@@ -940,12 +1029,17 @@ class EosdaAPIService:
                 }
             }
             
-            logger.info(f"📡 Enviando petición EOSDA: {len(indices)} índices, nubosidad max {max_nubosidad}%")
+            logger.info(f"📡 Enviando petición Statistics API: {len(indices)} índices")
+            logger.info(f"   Índices: {', '.join(indices_mayusculas)}")
+            logger.info(f"   Geometría: {geometria['type']} con {len(geometria.get('coordinates', [[]])[0])} puntos")
             
             response = self.session.post(url, json=payload, timeout=60)
             tiempo_respuesta = time.time() - tiempo_inicio
             
             if response.status_code not in [200, 201, 202]:
+                logger.error(f"❌ Error EOSDA: {response.status_code}")
+                logger.error(f"   Respuesta: {response.text[:500]}")
+                
                 # Registrar fallo
                 EstadisticaUsoEOSDA.registrar_uso(
                     usuario=usuario,
@@ -959,7 +1053,6 @@ class EosdaAPIService:
                     mensaje_error=response.text[:500]
                 )
                 
-                logger.error(f"❌ Error EOSDA: {response.status_code} - {response.text[:200]}")
                 return {'error': f'Error HTTP {response.status_code}', 'resultados': []}
             
             # Obtener task_id
@@ -970,21 +1063,38 @@ class EosdaAPIService:
                 logger.error("❌ No se obtuvo task_id de EOSDA")
                 return {'error': 'No task_id', 'resultados': []}
             
-            # 3. ESPERAR Y OBTENER RESULTADOS
-            logger.info(f"⏳ Esperando resultados de tarea {task_id}...")
-            resultados = self._obtener_resultados_tarea(task_id, 'optimizado')
+            logger.info(f"✅ Tarea creada: {task_id}")
+            
+            # 3. ESPERAR RESULTADOS CON DELAYS MÁS LARGOS
+            logger.info(f"⏳ Esperando resultados (delays de 10s para evitar rate limits)...")
+            resultados = self._obtener_resultados_tarea_lento(task_id)
             
             if not resultados:
                 logger.warning(f"⚠️ No se obtuvieron resultados para tarea {task_id}")
                 return {'error': 'Sin resultados', 'resultados': []}
             
-            # 4. GUARDAR EN CACHÉ
+            # 4. OBTENER DATOS CLIMÁTICOS
+            logger.info(f"🌡️ Obteniendo datos climáticos para {field_id}...")
+            try:
+                datos_clima = self._obtener_datos_climaticos_por_field_id(
+                    field_id=field_id,
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin
+                )
+                logger.info(f"   ✅ Datos climáticos: {len(datos_clima)} registros")
+            except Exception as e:
+                logger.warning(f"   ⚠️ Error obteniendo datos climáticos: {e}")
+                datos_clima = []
+            
+            # 5. GUARDAR EN CACHÉ
             datos_formateados = {
                 'resultados': resultados,
+                'datos_clima': datos_clima,  # Agregar datos climáticos
                 'field_id': field_id,
                 'indices': indices,
                 'fecha_consulta': datetime.now().isoformat(),
-                'num_escenas': len(resultados)
+                'num_escenas': len(resultados),
+                'metodo': 'statistics_api'
             }
             
             CacheDatosEOSDA.guardar_datos(
@@ -1005,11 +1115,11 @@ class EosdaAPIService:
                 endpoint=url,
                 exitoso=True,
                 tiempo_respuesta=tiempo_total,
-                requests_consumidos=1,  # ✅ Solo 1 request para todos los índices
+                requests_consumidos=1,  # 1 request inicial + polling
                 codigo_respuesta=response.status_code
             )
             
-            logger.info(f"✅ Datos obtenidos y guardados en caché - 1 request, {len(resultados)} escenas")
+            logger.info(f"✅ Datos obtenidos - 1 petición, {len(resultados)} escenas, {tiempo_total:.1f}s")
             return datos_formateados
             
         except requests.exceptions.Timeout:
@@ -1021,9 +1131,9 @@ class EosdaAPIService:
                 endpoint=f'{self.base_url}/api/gdw/api',
                 exitoso=False,
                 tiempo_respuesta=tiempo_respuesta,
-                mensaje_error='Timeout >60s'
+                mensaje_error='Timeout'
             )
-            logger.error("❌ Timeout en petición EOSDA")
+            logger.error("❌ Timeout en petición Statistics API")
             return {'error': 'Timeout', 'resultados': []}
             
         except Exception as e:
