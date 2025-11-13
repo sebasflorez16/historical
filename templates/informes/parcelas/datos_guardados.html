@@ -37,6 +37,226 @@
         height: 300px;
         margin: 20px 0;
     }
+    
+    /* ===== SPINNERS SATELITALES TEMÁTICOS ===== */
+    
+    /* Spinner satelital orbitando */
+    .satellite-spinner {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        position: relative;
+        animation: satellite-orbit 2s linear infinite;
+    }
+    
+    .satellite-spinner::before {
+        content: '🛰️';
+        font-size: 30px;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+    
+    .satellite-spinner::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 50px;
+        height: 50px;
+        border: 2px dashed #28a745;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        animation: orbit-ring 2s linear infinite;
+    }
+    
+    @keyframes satellite-orbit {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    @keyframes orbit-ring {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; }
+    }
+    
+    /* Barra de progreso satelital */
+    .satellite-progress {
+        width: 100%;
+        height: 6px;
+        background: linear-gradient(90deg, #e3f2fd 0%, #bbdefb 50%, #90caf9 100%);
+        border-radius: 10px;
+        position: relative;
+        overflow: hidden;
+        margin: 10px 0;
+    }
+    
+    .satellite-progress::before {
+        content: '🛰️';
+        position: absolute;
+        font-size: 20px;
+        top: -10px;
+        animation: satellite-scan 3s linear infinite;
+    }
+    
+    .satellite-progress::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: 30%;
+        background: linear-gradient(90deg, transparent, rgba(40, 167, 69, 0.6), transparent);
+        animation: progress-scan 2s ease-in-out infinite;
+    }
+    
+    @keyframes satellite-scan {
+        0% { left: -30px; }
+        100% { left: calc(100% + 30px); }
+    }
+    
+    @keyframes progress-scan {
+        0%, 100% { transform: translateX(-100%); }
+        50% { transform: translateX(400%); }
+    }
+    
+    /* Spinner de descarga de imagen */
+    .image-download-spinner {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 15px 25px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        color: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+    
+    .image-download-spinner .icon {
+        font-size: 24px;
+        animation: pulse-icon 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-icon {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.7; }
+    }
+    
+    /* Dots animados */
+    .loading-dots {
+        display: inline-flex;
+        gap: 4px;
+    }
+    
+    .loading-dots span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        animation: loading-dots-bounce 1.4s infinite ease-in-out both;
+    }
+    
+    .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+    .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+    
+    @keyframes loading-dots-bounce {
+        0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+        40% { transform: scale(1); opacity: 1; }
+    }
+    
+    /* Modal de descarga mejorado */
+    .download-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(5px);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        animation: fadeIn 0.3s ease;
+    }
+    
+    .download-modal.active {
+        display: flex;
+    }
+    
+    .download-modal-content {
+        background: white;
+        padding: 40px;
+        border-radius: 20px;
+        text-align: center;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 500px;
+        animation: slideUp 0.4s ease;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes slideUp {
+        from { transform: translateY(50px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+    
+    /* Mensajes de estado bonitos */
+    .status-message {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-weight: 500;
+        margin: 10px 0;
+        animation: slideIn 0.3s ease;
+    }
+    
+    .status-message.success {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        color: white;
+    }
+    
+    .status-message.error {
+        background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        color: white;
+    }
+    
+    .status-message.warning {
+        background: linear-gradient(135deg, #f2994a 0%, #f2c94c 100%);
+        color: white;
+    }
+    
+    @keyframes slideIn {
+        from { transform: translateX(-20px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    
+    /* Botón de descarga mejorado */
+    .descargar-imagen {
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .descargar-imagen:hover:not(:disabled) {
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.4);
+    }
+    
+    .descargar-imagen:active:not(:disabled) {
+        transform: scale(0.95);
+    }
+    
+    .descargar-imagen:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
 </style>
 {% endblock %}
 
@@ -258,6 +478,28 @@
         </div>
     {% endif %}
 </div>
+
+<!-- Modal de Descarga Satelital -->
+<div id="downloadModal" class="download-modal">
+    <div class="download-modal-content">
+        <div class="satellite-spinner"></div>
+        <h3 style="margin: 20px 0 10px 0; color: #333;">Descargando Imagen Satelital</h3>
+        <p id="modalMessage" style="color: #666; margin-bottom: 20px;">Procesando solicitud...</p>
+        
+        <div class="satellite-progress"></div>
+        
+        <div style="margin-top: 20px; color: #999; font-size: 0.9rem;">
+            <div id="progressSteps">
+                <div id="step1" style="opacity: 0.5;">🔍 Buscando escena en caché...</div>
+                <div id="step2" style="opacity: 0.5;">📡 Solicitando imagen a EOSDA...</div>
+                <div id="step3" style="opacity: 0.5;">⏳ Esperando generación...</div>
+                <div id="step4" style="opacity: 0.5;">💾 Guardando imagen...</div>
+                <div id="step5" style="opacity: 0.5;">✅ ¡Listo!</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -377,15 +619,77 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     {% endif %}
     
+    // ===== SISTEMA DE DESCARGA DE IMÁGENES CON UX MEJORADA =====
+    
+    const modal = document.getElementById('downloadModal');
+    const modalMessage = document.getElementById('modalMessage');
+    
+    // Función para mostrar modal con paso específico
+    function showModal(step, message) {
+        modal.classList.add('active');
+        modalMessage.textContent = message;
+        
+        // Activar paso visual
+        for (let i = 1; i <= 5; i++) {
+            const stepEl = document.getElementById(`step${i}`);
+            if (stepEl) {
+                stepEl.style.opacity = i <= step ? '1' : '0.5';
+                stepEl.style.fontWeight = i === step ? 'bold' : 'normal';
+                stepEl.style.color = i === step ? '#28a745' : i < step ? '#6c757d' : '#999';
+            }
+        }
+    }
+    
+    // Función para ocultar modal
+    function hideModal() {
+        modal.classList.remove('active');
+        // Reset pasos
+        for (let i = 1; i <= 5; i++) {
+            const stepEl = document.getElementById(`step${i}`);
+            if (stepEl) {
+                stepEl.style.opacity = '0.5';
+                stepEl.style.fontWeight = 'normal';
+                stepEl.style.color = '#999';
+            }
+        }
+    }
+    
+    // Función para mostrar notificación toast
+    function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = `status-message ${type}`;
+        toast.style.position = 'fixed';
+        toast.style.top = '20px';
+        toast.style.right = '20px';
+        toast.style.zIndex = '10000';
+        
+        const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : '⚠️';
+        toast.innerHTML = `<span>${icon}</span><span>${message}</span>`;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+    
     // Función para descargar imagen satelital
     function descargarImagen(registroId, indice) {
         const boton = document.querySelector(`button[data-registro-id="${registroId}"]`);
         const estadoIcono = document.querySelector(`.estado-imagen[data-registro-id="${registroId}"] small`);
         const textoOriginal = boton.innerHTML;
         
-        // Deshabilitar botón y mostrar spinner
+        // Deshabilitar botón
         boton.disabled = true;
         boton.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        
+        // Mostrar modal - Paso 1
+        showModal(1, `Buscando escena ${indice} en caché...`);
+        
+        // Simular progreso de pasos
+        setTimeout(() => showModal(2, `Solicitando imagen ${indice} a EOSDA...`), 1000);
+        setTimeout(() => showModal(3, `Esperando generación de imagen...`), 2000);
         
         // Realizar petición AJAX
         fetch(`{% url 'informes:descargar_imagen_indice' 0 %}`.replace('0', registroId), {
@@ -399,27 +703,44 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                if (data.existe) {
-                    // Imagen ya existía
-                    alert(`✅ Imagen ${indice} ya descargada.\n\nFecha: ${data.fecha || 'N/A'}\nNubosidad: ${data.nubosidad || 'N/A'}%`);
-                } else {
-                    // Imagen descargada exitosamente
-                    alert(`✅ Imagen ${indice} descargada exitosamente.\n\nFecha: ${data.fecha}\nNubosidad: ${data.nubosidad}%`);
-                    estadoIcono.className = 'text-success';
-                    estadoIcono.textContent = '✅';
-                }
+                showModal(4, 'Guardando imagen...');
                 
-                // Abrir imagen en nueva pestaña
-                if (data.url) {
-                    window.open(data.url, '_blank');
-                }
+                setTimeout(() => {
+                    showModal(5, '¡Imagen descargada exitosamente!');
+                    
+                    setTimeout(() => {
+                        hideModal();
+                        
+                        // Mensaje personalizado
+                        if (data.existe) {
+                            showToast(`✅ Imagen ${indice} ya estaba descargada`, 'success');
+                        } else {
+                            showToast(`✅ Imagen ${indice} descargada • ${data.nubosidad}% nubosidad`, 'success');
+                            estadoIcono.className = 'text-success';
+                            estadoIcono.textContent = '✅';
+                        }
+                        
+                        // Abrir imagen en nueva pestaña
+                        if (data.url) {
+                            setTimeout(() => window.open(data.url, '_blank'), 500);
+                        }
+                    }, 1000);
+                }, 500);
             } else {
-                alert(`❌ Error: ${data.error}`);
+                hideModal();
+                
+                // Mensaje de error detallado
+                if (data.requiere_statistics) {
+                    showToast('⚠️ Primero obtén datos históricos desde el botón "Actualizar Datos"', 'warning');
+                } else {
+                    showToast(`❌ Error: ${data.error}`, 'error');
+                }
             }
         })
         .catch(error => {
+            hideModal();
             console.error('Error:', error);
-            alert('❌ Error descargando imagen. Por favor, intente nuevamente.');
+            showToast('❌ Error de conexión. Intenta nuevamente.', 'error');
         })
         .finally(() => {
             // Rehabilitar botón
@@ -435,11 +756,27 @@ document.addEventListener('DOMContentLoaded', function() {
             const selector = document.querySelector(`.indice-selector[data-registro-id="${registroId}"]`);
             const indice = selector.value;
             
-            if (confirm(`¿Descargar imagen ${indice} para este período?`)) {
-                descargarImagen(registroId, indice);
-            }
+            descargarImagen(registroId, indice);
         });
     });
+    
+    // Cerrar modal al hacer click fuera
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            // No permitir cerrar mientras está descargando
+            // hideModal();
+        }
+    });
+    
+    // Animación para slideOut
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100px); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
 });
 </script>
 {% endblock %}
