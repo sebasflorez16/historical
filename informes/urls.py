@@ -51,6 +51,7 @@ urlpatterns = [
     
     # Imágenes satelitales
     path('registro/<int:registro_id>/descargar-imagen/', views.descargar_imagen_indice, name='descargar_imagen_indice'),
+    path('parcelas/<int:parcela_id>/galeria-imagenes/', views.galeria_imagenes, name='galeria_imagenes'),
     
     # API endpoints
     path('api/parcelas/<int:parcela_id>/datos/', views.api_datos_parcela, name='api_datos_parcela'),

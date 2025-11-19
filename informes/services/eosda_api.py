@@ -1168,19 +1168,21 @@ class EosdaAPIService:
             return {'error': str(e), 'resultados': []}
     
     def descargar_imagen_satelital(self, field_id: str, indice: str, 
+                                   view_id: str = None,
                                    fecha_escena: str = None,
                                    max_nubosidad: float = 50.0) -> Optional[Dict]:
         """
         Descarga imagen satelital usando Field Imagery API de EOSDA.
         
         OPTIMIZADO para reducir consumo de requests:
-        - Si se proporciona fecha_escena, busca el view_id directamente (menos requests)
-        - Usa escenas ya conocidas del caché de Statistics API cuando sea posible
+        - Si se proporciona view_id directamente, solo hace ~7 requests (1 POST + 6 GET polling)
+        - Si no hay view_id, retorna None para evitar búsquedas costosas
         
         Args:
             field_id: ID del campo en EOSDA
             indice: Tipo de índice ('NDVI', 'NDMI', 'SAVI')
-            fecha_escena: Fecha de escena específica (formato ISO) - RECOMENDADO para ahorrar requests
+            view_id: ID de la vista satelital (RECOMENDADO - ahorra ~15 requests)
+            fecha_escena: Fecha de escena específica (formato ISO) - para logging
             max_nubosidad: Máximo porcentaje de nubosidad (default 50%)
         
         Returns:
@@ -1201,51 +1203,24 @@ class EosdaAPIService:
             eosda_index = index_mapping[indice]
             logger.info(f"   📷 Descargando imagen {indice} para field {field_id}")
             
-            # OPTIMIZACIÓN: Si no tenemos fecha_escena, intentar obtener del caché de Statistics
-            view_id = None
-            fecha_imagen = fecha_escena
-            nubosidad = None
-            
-            if not fecha_escena:
-                logger.info(f"   🔍 Buscando escena en caché de Statistics API...")
-                from informes.models import CacheDatosEOSDA
-                
-                # Buscar caché reciente (últimos 30 días)
-                fecha_fin = date.today()
-                fecha_inicio = fecha_fin - timedelta(days=30)
-                
-                cache_reciente = CacheDatosEOSDA.objects.filter(
-                    field_id=field_id,
-                    valido_hasta__gte=timezone.now()
-                ).order_by('-fecha_fin').first()
-                
-                if cache_reciente and cache_reciente.datos_json:
-                    datos = json.loads(cache_reciente.datos_json)
-                    resultados = datos.get('resultados', [])
-                    
-                    # Buscar escena con baja nubosidad
-                    for escena in resultados:
-                        cloud = escena.get('cloud', 100)
-                        if cloud <= max_nubosidad:
-                            view_id = escena.get('id')
-                            fecha_imagen = escena.get('date')
-                            nubosidad = cloud
-                            logger.info(f"   ✅ Escena encontrada en caché: {fecha_imagen} (nubosidad: {nubosidad}%)")
-                            break
-            
-            # Si no encontramos en caché, usar Field Imagery API directamente
+            # ✅ OPTIMIZACIÓN: Requerir view_id para evitar búsquedas costosas
             if not view_id:
-                logger.warning(f"   ⚠️ No hay escena en caché, esto consumirá ~15-20 requests adicionales")
-                logger.warning(f"   💡 Recomendación: Obtener datos de Statistics API primero")
+                logger.warning(f"   ⚠️ No se proporcionó view_id")
+                logger.warning(f"   💡 Recomendación: Obtener datos de Statistics API primero para obtener view_ids")
                 return None
             
+            fecha_imagen = fecha_escena
+            nubosidad = None  # Se calculará del registro si está disponible
+            
             # Paso 1: Crear request para generar imagen
-            url_imagery = f"{self.base_url}/api/field-imagery/indicies/{field_id}"
+            url_imagery = f"{self.base_url}/field-imagery/indicies/{field_id}"
             
             payload_imagen = {
-                'view_id': view_id,
-                'index': eosda_index,
-                'format': 'png'
+                'params': {
+                    'view_id': view_id,
+                    'index': indice,  # ✅ Usar el índice en MAYÚSCULAS (NDVI, NDMI, SAVI)
+                    'format': 'png'
+                }
             }
             
             logger.info(f"   🎨 Generando imagen {indice} (view_id: {view_id})...")
@@ -1261,10 +1236,10 @@ class EosdaAPIService:
                 logger.error(f"   ❌ No se obtuvo request_id para imagen")
                 return None
             
-            # Paso 2: Polling para descargar imagen (máximo 60 segundos, 6 intentos)
-            url_download = f"{self.base_url}/api/field-imagery/indicies/{field_id}/{request_id}"
-            max_intentos = 6  # Reducido de 12 a 6
-            intervalo = 10  # Aumentado de 5 a 10 segundos
+            # Paso 2: Polling para descargar imagen (máximo 120 segundos, 12 intentos)
+            url_download = f"{self.base_url}/field-imagery/{field_id}/{request_id}"
+            max_intentos = 12  # 12 intentos x 10 segundos = 2 minutos máximo
+            intervalo = 10  # 10 segundos entre intentos
             
             for intento in range(max_intentos):
                 time.sleep(intervalo)
@@ -1272,25 +1247,43 @@ class EosdaAPIService:
                 logger.info(f"   ⏳ Esperando imagen... intento {intento + 1}/{max_intentos}")
                 response = self.session.get(url_download, timeout=60)
                 
+                logger.debug(f"   Status: {response.status_code}, Content-Type: {response.headers.get('Content-Type', 'N/A')}")
+                
                 if response.status_code == 200:
                     content_type = response.headers.get('Content-Type', '')
-                    if 'image' in content_type:
-                        logger.info(f"   ✅ Imagen {indice} descargada ({len(response.content)} bytes)")
-                        return {
-                            'imagen': response.content,
-                            'fecha': fecha_imagen,
-                            'nubosidad': nubosidad,
-                            'view_id': view_id,
-                            'content_type': content_type
-                        }
-                    else:
-                        logger.debug(f"   ⏳ Imagen aún en proceso...")
-                        continue
+                    content_length = int(response.headers.get('Content-Length', 0))
+                    
+                    # ✅ Verificar si es imagen por Content-Type O por tamaño > 1KB
+                    if 'image' in content_type or 'octet-stream' in content_type or content_length > 1000:
+                        # Verificar que sea PNG válido
+                        if response.content[:4] == b'\x89PNG' or len(response.content) > 1000:
+                            logger.info(f"   ✅ Imagen {indice} descargada ({len(response.content)} bytes)")
+                            return {
+                                'imagen': response.content,
+                                'fecha': fecha_imagen,
+                                'nubosidad': nubosidad,
+                                'view_id': view_id,
+                                'content_type': 'image/png'
+                            }
+                    
+                    # Si no es imagen, revisar si es JSON con estado
+                    try:
+                        data = response.json()
+                        status = data.get('status', 'unknown')
+                        logger.debug(f"   ⏳ Estado: {status}")
+                        if status in ['failed', 'error']:
+                            logger.error(f"   ❌ Error en generación: {data.get('error', 'Unknown')}")
+                            return None
+                    except:
+                        pass
+                    logger.debug(f"   ⏳ Imagen aún en proceso...")
+                    continue
                 elif response.status_code == 404:
                     logger.debug(f"   ⏳ Imagen no lista aún...")
                     continue
                 else:
                     logger.error(f"   ❌ Error descargando imagen: {response.status_code}")
+                    logger.debug(f"   Response: {response.text[:200]}")
                     return None
             
             logger.warning(f"   ⏱️ Timeout esperando generación de imagen {indice}")

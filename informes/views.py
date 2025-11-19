@@ -1220,7 +1220,8 @@ def obtener_datos_historicos(request, parcela_id):
             'ndvi_valores': [], 'ndvi_max': [], 'ndvi_min': [],
             'ndmi_valores': [], 'ndmi_max': [], 'ndmi_min': [],
             'savi_valores': [], 'savi_max': [], 'savi_min': [],
-            'nubosidad': []
+            'nubosidad': [],
+            'escenas': []  # Guardar todas las escenas para encontrar la mejor
         })
         
         # Procesar cada escena satelital
@@ -1236,6 +1237,7 @@ def obtener_datos_historicos(request, parcela_id):
                 # Extraer índices de cada escena
                 indexes = escena.get('indexes', {})
                 nubosidad = escena.get('cloud', 0)
+                view_id = escena.get('view_id')  # ✅ view_id de la escena (campo correcto según API)
                 
                 # NDVI
                 if 'NDVI' in indexes:
@@ -1256,6 +1258,13 @@ def obtener_datos_historicos(request, parcela_id):
                     datos_por_mes[clave_mes]['savi_min'].append(indexes['SAVI'].get('min', 0))
                 
                 datos_por_mes[clave_mes]['nubosidad'].append(nubosidad)
+                
+                # ✅ Guardar info completa de la escena para encontrar la mejor
+                datos_por_mes[clave_mes]['escenas'].append({
+                    'view_id': view_id,
+                    'fecha': fecha,
+                    'nubosidad': nubosidad
+                })
                 
             except Exception as e:
                 logger.error(f"Error procesando escena: {str(e)}")
@@ -1279,6 +1288,15 @@ def obtener_datos_historicos(request, parcela_id):
                 
                 nub_prom = sum(datos['nubosidad']) / len(datos['nubosidad']) if datos['nubosidad'] else 0
                 
+                # ✅ Encontrar la escena con MENOR nubosidad del mes para imágenes
+                mejor_escena = None
+                if datos['escenas']:
+                    mejor_escena = min(datos['escenas'], key=lambda x: x['nubosidad'])
+                    logger.info(f"   🎯 Mejor escena para {month:02d}/{year}: "
+                               f"view_id={mejor_escena['view_id']}, "
+                               f"fecha={mejor_escena['fecha']}, "
+                               f"nubosidad={mejor_escena['nubosidad']:.1f}%")
+                
                 # Crear o actualizar registro mensual
                 defaults = {
                     'ndvi_promedio': ndvi_prom,
@@ -1294,6 +1312,12 @@ def obtener_datos_historicos(request, parcela_id):
                     'fuente_datos': 'EOSDA',
                     'calidad_datos': 'buena' if nub_prom < 30 else ('regular' if nub_prom < 50 else 'pobre')
                 }
+                
+                # ✅ Agregar metadatos de la mejor escena para descarga de imágenes
+                if mejor_escena:
+                    defaults['view_id_imagen'] = mejor_escena['view_id']
+                    defaults['fecha_imagen'] = mejor_escena['fecha']
+                    defaults['nubosidad_imagen'] = mejor_escena['nubosidad']
                 
                 indice, created = IndiceMensual.objects.update_or_create(
                     parcela=parcela,
@@ -1562,6 +1586,54 @@ def estado_sincronizacion_eosda(request):
 
 
 @login_required
+def galeria_imagenes(request, parcela_id):
+    """
+    Vista para mostrar galería de imágenes satelitales de una parcela
+    Muestra todas las imágenes NDVI, NDMI, SAVI descargadas organizadas por mes
+    """
+    try:
+        parcela = get_object_or_404(Parcela, id=parcela_id, activa=True)
+        
+        # Obtener todos los registros con imágenes
+        from django.db.models import Q
+        registros_con_imagenes = IndiceMensual.objects.filter(
+            parcela=parcela
+        ).filter(
+            Q(imagen_ndvi__isnull=False) | 
+            Q(imagen_ndmi__isnull=False) | 
+            Q(imagen_savi__isnull=False)
+        ).order_by('-año', '-mes')
+        
+        # Estadísticas
+        total_imagenes = 0
+        imagenes_por_tipo = {'NDVI': 0, 'NDMI': 0, 'SAVI': 0}
+        
+        for registro in registros_con_imagenes:
+            if registro.imagen_ndvi:
+                total_imagenes += 1
+                imagenes_por_tipo['NDVI'] += 1
+            if registro.imagen_ndmi:
+                total_imagenes += 1
+                imagenes_por_tipo['NDMI'] += 1
+            if registro.imagen_savi:
+                total_imagenes += 1
+                imagenes_por_tipo['SAVI'] += 1
+        
+        contexto = {
+            'parcela': parcela,
+            'registros_con_imagenes': registros_con_imagenes,
+            'total_imagenes': total_imagenes,
+            'imagenes_por_tipo': imagenes_por_tipo,
+        }
+        
+        return render(request, 'informes/parcelas/galeria_imagenes.html', contexto)
+        
+    except Exception as e:
+        logger.error(f"Error en galería de imágenes: {str(e)}")
+        messages.error(request, f"Error cargando galería: {str(e)}")
+        return redirect('informes:detalle_parcela', parcela_id=parcela_id)
+
+
 def descargar_imagen_indice(request, registro_id):
     """
     Vista AJAX para descargar imagen satelital desde Field Imagery API de EOSDA.
@@ -1610,66 +1682,30 @@ def descargar_imagen_indice(request, registro_id):
                 'error': 'La parcela no está sincronizada con EOSDA'
             }, status=400)
         
-        # OPTIMIZACIÓN: Buscar escena en caché de Statistics API para evitar búsquedas costosas
-        from .models_configuracion import CacheDatosEOSDA
-        import json as json_lib
-        
-        view_id_cache = None
-        fecha_escena = None
-        nubosidad_escena = None
-        
-        # Buscar en caché de Statistics que contenga el período del registro
-        fecha_registro = date(registro.año, registro.mes, 1)
-        
-        cache_valido = CacheDatosEOSDA.objects.filter(
-            field_id=registro.parcela.eosda_field_id,
-            fecha_inicio__lte=fecha_registro,
-            fecha_fin__gte=fecha_registro,
-            valido_hasta__gte=timezone.now()
-        ).first()
-        
-        if cache_valido and cache_valido.datos_json:
-            try:
-                datos_cache = json_lib.loads(cache_valido.datos_json)
-                resultados = datos_cache.get('resultados', [])
-                
-                # Buscar mejor escena para ese mes
-                for escena in resultados:
-                    escena_fecha = escena.get('date', '')
-                    if escena_fecha.startswith(f"{registro.año}-{registro.mes:02d}"):
-                        cloud = escena.get('cloud', 100)
-                        if cloud <= 50 and (nubosidad_escena is None or cloud < nubosidad_escena):
-                            view_id_cache = escena.get('id')
-                            fecha_escena = escena_fecha
-                            nubosidad_escena = cloud
-                
-                if view_id_cache:
-                    logger.info(f"✅ Escena encontrada en caché: {fecha_escena} (nubosidad: {nubosidad_escena}%)")
-            except Exception as e:
-                logger.warning(f"⚠️ Error leyendo caché: {str(e)}")
-        
-        if not view_id_cache:
+        # ✅ OPTIMIZACIÓN: Usar view_id ya guardado en el modelo (0 requests adicionales!)
+        if not registro.view_id_imagen:
             return JsonResponse({
                 'success': False,
                 'error': (
-                    f'⚠️ Sin datos de Statistics API para {registro.año}-{registro.mes:02d}.\n\n'
+                    f'⚠️ Sin view_id para {registro.año}-{registro.mes:02d}.\n\n'
                     f'📋 Flujo correcto:\n'
                     f'1️⃣ Obtener Datos Históricos (Statistics API)\n'
                     f'2️⃣ Descargar imágenes específicas\n\n'
-                    f'💡 Esto ahorra ~10-15 requests por imagen.\n\n'
+                    f'💡 Esto ahorra ~15-20 requests por imagen.\n\n'
                     f'Haz clic en "Actualizar Datos" en la parte superior.'
                 ),
                 'requiere_statistics': True
             }, status=400)
         
-        # Descargar imagen usando view_id del caché (OPTIMIZADO: solo 1 POST + ~6 GET = ~7 requests)
-        logger.info(f"📷 Descargando imagen {indice} para registro {registro_id} usando caché")
+        logger.info(f"📷 Descargando imagen {indice} para registro {registro_id} usando view_id guardado: {registro.view_id_imagen}")
         eosda_service = EosdaAPIService()
         
+        # ✅ Usar view_id y fecha ya guardados en el modelo
         resultado = eosda_service.descargar_imagen_satelital(
             field_id=registro.parcela.eosda_field_id,
             indice=indice,
-            fecha_escena=fecha_escena,  # Usar fecha del caché
+            view_id=registro.view_id_imagen,  # ✅ Usar view_id guardado
+            fecha_escena=registro.fecha_imagen.isoformat() if registro.fecha_imagen else None,
             max_nubosidad=50.0
         )
         

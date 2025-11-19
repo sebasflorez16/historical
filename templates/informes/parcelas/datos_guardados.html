@@ -269,6 +269,9 @@
             <p class="text-muted">{{ parcela.nombre }} - Datos históricos en base de datos</p>
         </div>
         <div>
+            <a href="{% url 'informes:galeria_imagenes' parcela.id %}" class="btn btn-info me-2">
+                <i class="fas fa-images"></i> Ver Galería
+            </a>
             <a href="{% url 'informes:detalle_parcela' parcela.id %}" class="btn btn-secondary me-2">
                 <i class="fas fa-arrow-left"></i> Volver a Parcela
             </a>
@@ -700,7 +703,13 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: `indice=${indice}`
         })
-        .then(response => response.json())
+        .then(response => {
+            // Verificar si la respuesta es exitosa
+            if (!response.ok) {
+                throw new Error(`Error HTTP ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 showModal(4, 'Guardando imagen...');
@@ -727,6 +736,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }, 1000);
                 }, 500);
             } else {
+                // ✅ SIEMPRE cerrar el modal en caso de error
                 hideModal();
                 
                 // Mensaje de error detallado
@@ -738,6 +748,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
+            // ✅ SIEMPRE cerrar el modal en caso de error de red
             hideModal();
             console.error('Error:', error);
             showToast('❌ Error de conexión. Intenta nuevamente.', 'error');
