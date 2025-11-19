@@ -3,8 +3,10 @@ Vistas para la aplicación de informes AgroTech Histórico
 Incluye dashboard, gestión de parcelas, análisis y autenticación
 """
 
+import os
 import logging
 import json
+import secrets
 from datetime import datetime, timedelta, date
 from decimal import Decimal
 from typing import Optional, Dict, List, Any
@@ -14,38 +16,24 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User
-from django.http import JsonResponse, HttpResponse, HttpResponseRedirect
+from django.http import JsonResponse, HttpResponse, HttpResponseRedirect, FileResponse
 from django.db.models import Q, Count, Avg, Sum
 from django.core.paginator import Paginator
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
 from .models import Parcela, IndiceMensual, Informe, ConfiguracionAPI
 from .models_clientes import ClienteInvitacion, RegistroEconomico
-# from .utils.eosda_client import EOSDAClient
-# from .utils.ai_analyzer import AIAnalyzer
-# from .utils.pdf_generator import PDFGenerator
-
-# Configurar logging
-logger = logging.getLogger(__name__)
-
-from django.shortcuts import render, get_object_or_404, redirect
-from django.http import JsonResponse, HttpResponse
-from django.contrib import messages
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from django.core.paginator import Paginator
-from django.db.models import Q
-import json
-from datetime import datetime, date, timedelta
-import logging
-
-from .models import Parcela, IndiceMensual, Informe
 # Importaciones de servicios
 from .services.eosda_api import eosda_service
 from .services.analisis_datos import analisis_service
+# Importar generador de PDF
+from .generador_pdf import GeneradorPDFProfesional
 
+# Configurar logging
 logger = logging.getLogger(__name__)
 
 
@@ -1444,7 +1432,7 @@ def obtener_datos_historicos(request, parcela_id):
                 temperatura_promedio=dato.get('temperatura_promedio'),
                 temperatura_maxima=dato.get('temperatura_maxima'),
                 temperatura_minima=dato.get('temperatura_minima'),
-                precipitacion_total=dato.get('precipitacion_total')
+                precipitacion_total=dato.get('precipitation_total')
             )
         
         logger.info(f"Datos históricos procesados para {parcela.nombre}: {indices_creados} nuevos registros")
@@ -1777,3 +1765,85 @@ def descargar_imagen_indice(request, registro_id):
             'success': False,
             'error': f'Error interno: {str(e)}'
         }, status=500)
+
+
+@login_required
+def generar_informe_pdf(request, parcela_id):
+    """
+    Vista para generar informe PDF profesional de una parcela
+    Accesible desde el botón "Generar Informe" en detalle de parcela
+    """
+    try:
+        # Verificar que la parcela existe
+        parcela = get_object_or_404(Parcela, id=parcela_id, activa=True)
+        
+        # Verificar permisos (propietario o superusuario)
+        if not request.user.is_superuser and parcela.propietario != request.user.username:
+            messages.error(request, 'No tiene permisos para generar informes de esta parcela.')
+            return redirect('informes:detalle_parcela', parcela_id=parcela_id)
+        
+        # Obtener parámetros opcionales
+        meses_atras = int(request.GET.get('meses', 12))
+        
+        # Validar que hay datos disponibles
+        indices_count = IndiceMensual.objects.filter(parcela=parcela).count()
+        if indices_count == 0:
+            messages.warning(request, 
+                           'No hay datos satelitales disponibles para esta parcela. '
+                           'Por favor sincronice datos primero.')
+            return redirect('informes:detalle_parcela', parcela_id=parcela_id)
+        
+        # Generar PDF
+        try:
+            generador = GeneradorPDFProfesional()
+            ruta_pdf = generador.generar_informe_completo(
+                parcela_id=parcela_id,
+                meses_atras=meses_atras
+            )
+            
+            # Verificar que el archivo se generó
+            if not os.path.exists(ruta_pdf):
+                raise FileNotFoundError(f"El PDF no se generó correctamente en {ruta_pdf}")
+            
+            # Crear registro de informe en BD
+            from datetime import timedelta
+            titulo_informe = f"Informe - {parcela.nombre}"[:290]  # Limitar a 290 caracteres
+            informe = Informe.objects.create(
+                parcela=parcela,
+                periodo_analisis_meses=meses_atras,
+                fecha_inicio_analisis=(datetime.now() - timedelta(days=meses_atras*30)).date(),
+                fecha_fin_analisis=datetime.now().date(),
+                titulo=titulo_informe,
+                resumen_ejecutivo=f"Informe generado con {indices_count} meses de datos satelitales.",
+                archivo_pdf=ruta_pdf
+            )
+            
+            # Enviar archivo para descarga
+            from django.http import FileResponse
+            response = FileResponse(
+                open(ruta_pdf, 'rb'),
+                content_type='application/pdf'
+            )
+            response['Content-Disposition'] = f'attachment; filename="informe_{parcela.nombre.replace(" ", "_")}.pdf"'
+            
+            # Log de éxito
+            logger.info(f"Informe PDF generado exitosamente para parcela {parcela.nombre} (ID: {parcela_id})")
+            messages.success(request, 
+                           f'¡Informe generado exitosamente! '
+                                                     f'Analizados {indices_count} registros mensuales.')
+            
+            return response
+            
+        except Exception as e_generacion:
+            logger.error(f"Error generando PDF para parcela {parcela_id}: {str(e_generacion)}")
+            logger.exception(e_generacion)
+            messages.error(request, 
+                          f'Error generando el informe PDF: {str(e_generacion)}. '
+                          'Por favor contacte al administrador.')
+            return redirect('informes:detalle_parcela', parcela_id=parcela_id)
+        
+    except Exception as e:
+        logger.error(f"Error en generar_informe_pdf para parcela {parcela_id}: {str(e)}")
+        logger.exception(e)
+        messages.error(request, f'Error: {str(e)}')
+        return redirect('informes:lista_parcelas')

@@ -374,6 +374,27 @@ class IndiceMensual(models.Model):
         return f"{meses[self.mes]} {self.año}"
     
     @property
+    def fecha(self):
+        """Retorna una fecha datetime para facilitar el ordenamiento y procesamiento"""
+        from datetime import datetime
+        return datetime(self.año, self.mes, 1)
+    
+    @property
+    def ndvi(self):
+        """Alias para ndvi_promedio, para compatibilidad con analizadores"""
+        return self.ndvi_promedio or 0.0
+    
+    @property
+    def ndmi(self):
+        """Alias para ndmi_promedio, para compatibilidad con analizadores"""
+        return self.ndmi_promedio or 0.0
+    
+    @property
+    def savi(self):
+        """Alias para savi_promedio, para compatibilidad con analizadores"""
+        return self.savi_promedio or 0.0
+    
+    @property
     def salud_vegetacion(self):
         """Evalúa la salud de la vegetación basada en NDVI"""
         if not self.ndvi_promedio:
@@ -432,16 +453,19 @@ class Informe(models.Model):
     # Archivos generados
     archivo_pdf = models.FileField(
         upload_to='informes/pdfs/%Y/%m/',
+        max_length=500,
         null=True, blank=True,
         verbose_name="Archivo PDF"
     )
     mapa_ndvi_imagen = models.ImageField(
         upload_to='informes/mapas/%Y/%m/',
+        max_length=500,
         null=True, blank=True,
         verbose_name="Mapa NDVI"
     )
     grafico_tendencias = models.ImageField(
         upload_to='informes/graficos/%Y/%m/',
+        max_length=500,
         null=True, blank=True,
         verbose_name="Gráfico Tendencias"
     )
