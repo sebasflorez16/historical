@@ -1,0 +1,303 @@
+{% extends 'informes/base_public.html' %}
+{% load static %}
+
+{% block title %}Registro de Parcela - AgroTech Histórico{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<style>
+    .registro-container {
+        padding: 40px 0;
+    }
+    
+    .registro-card {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .card-header {
+        background: linear-gradient(135deg, #2d5a27, #4a8234);
+        color: white;
+        padding: 30px;
+    }
+    
+    #mapa-registro {
+        height: 500px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .info-box {
+        background: #e8f5e9;
+        border-left: 4px solid #4caf50;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+    
+    .btn-success {
+        background: linear-gradient(135deg, #2d5a27, #4a8234);
+        border: none;
+        padding: 12px 30px;
+        font-weight: 600;
+    }
+    
+    .btn-success:hover {
+        background: linear-gradient(135deg, #1a3009, #2d5016);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container registro-container">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="card registro-card">
+                <div class="card-header text-center">
+                    <h2 class="mb-2">
+                        <i class="fas fa-map-marked-alt me-2"></i>
+                        Registro de Parcela
+                    </h2>
+                    <p class="mb-0">Bienvenido, <strong>{{ invitacion.nombre_cliente }}</strong></p>
+                </div>
+                
+                <div class="card-body p-4 p-md-5">
+                    <!-- Información de la invitación -->
+                    <div class="info-box">
+                        <h5 class="text-success mb-2">
+                            <i class="fas fa-info-circle me-2"></i>
+                            Información de tu Servicio
+                        </h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Email:</strong> {{ invitacion.email_cliente }}</p>
+                                {% if invitacion.telefono_cliente %}
+                                <p class="mb-1"><strong>Teléfono:</strong> {{ invitacion.telefono_cliente }}</p>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-1"><strong>Costo del servicio:</strong> ${{ invitacion.costo_servicio|floatformat:2 }}</p>
+                                <p class="mb-1"><strong>Válida hasta:</strong> {{ invitacion.fecha_vencimiento|date:"d/m/Y" }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Formulario de registro -->
+                    <form method="post" id="formRegistro">
+                        {% csrf_token %}
+                        
+                        <input type="hidden" name="geometria" id="geometria" required>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="nombre" class="form-label">
+                                    <i class="fas fa-tag me-1"></i>
+                                    Nombre de la Parcela <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="nombre" name="nombre" required
+                                       placeholder="Ej: Lote 1, Finca Norte, etc.">
+                                <small class="text-muted">Identifica tu parcela con un nombre único</small>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                <label for="tipo_cultivo" class="form-label">
+                                    <i class="fas fa-seedling me-1"></i>
+                                    Tipo de Cultivo
+                                </label>
+                                <input type="text" class="form-control" id="tipo_cultivo" name="tipo_cultivo"
+                                       placeholder="Ej: Arroz, Maíz, Café, etc.">
+                                <small class="text-muted">Opcional: tipo de cultivo principal</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="notas" class="form-label">
+                                <i class="fas fa-sticky-note me-1"></i>
+                                Notas Adicionales
+                            </label>
+                            <textarea class="form-control" id="notas" name="notas" rows="3"
+                                      placeholder="Información adicional sobre la parcela (opcional)"></textarea>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <h5 class="mb-3">
+                            <i class="fas fa-map me-2 text-success"></i>
+                            Dibuja tu Parcela en el Mapa
+                        </h5>
+                        
+                        <div class="alert alert-info">
+                            <strong><i class="fas fa-lightbulb me-2"></i>Instrucciones:</strong>
+                            <ol class="mb-0 mt-2">
+                                <li>Busca la ubicación de tu parcela usando el buscador</li>
+                                <li>Haz zoom sobre tu parcela para mayor precisión</li>
+                                <li>Usa la herramienta de polígono <i class="fas fa-draw-polygon"></i> para dibujar el perímetro</li>
+                                <li>Haz clic en cada esquina de tu parcela</li>
+                                <li>Completa el polígono haciendo clic en el primer punto nuevamente</li>
+                            </ol>
+                        </div>
+                        
+                        <!-- Buscador de ubicación -->
+                        <div class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fas fa-search"></i>
+                                </span>
+                                <input type="text" class="form-control" id="buscarDireccion" 
+                                       placeholder="Buscar dirección o lugar...">
+                                <button class="btn btn-outline-secondary" type="button" id="btnBuscar">
+                                    Buscar
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Mapa -->
+                        <div id="mapa-registro"></div>
+                        
+                        <div id="infoGeometria" class="alert alert-warning mt-3" style="display: none;">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Por favor dibuja la parcela en el mapa antes de continuar.
+                        </div>
+                        
+                        <div id="exitoGeometria" class="alert alert-success mt-3" style="display: none;">
+                            <i class="fas fa-check-circle me-2"></i>
+                            ¡Parcela dibujada correctamente! Área aproximada: <span id="areaTexto"></span>
+                        </div>
+                        
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-check me-2"></i>
+                                Registrar Parcela
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar mapa
+    const mapa = L.map('mapa-registro').setView([4.5709, -74.2973], 6);
+    
+    // Capa base satelital
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri'
+    }).addTo(mapa);
+    
+    // Capa de etiquetas
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors, © CartoDB'
+    }).addTo(mapa);
+    
+    // Grupo de capas dibujadas
+    const drawnItems = new L.FeatureGroup();
+    mapa.addLayer(drawnItems);
+    
+    // Control de dibujo
+    const drawControl = new L.Control.Draw({
+        position: 'topright',
+        draw: {
+            polygon: {
+                allowIntersection: false,
+                showArea: true,
+                metric: true
+            },
+            polyline: false,
+            rectangle: false,
+            circle: false,
+            marker: false,
+            circlemarker: false
+        },
+        edit: {
+            featureGroup: drawnItems,
+            remove: true
+        }
+    });
+    mapa.addControl(drawControl);
+    
+    // Guardar geometría al dibujar
+    mapa.on('draw:created', function (e) {
+        drawnItems.clearLayers();
+        const layer = e.layer;
+        drawnItems.addLayer(layer);
+        
+        const geojson = layer.toGeoJSON();
+        document.getElementById('geometria').value = JSON.stringify(geojson);
+        
+        // Calcular área
+        const area = L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]);
+        const hectareas = (area / 10000).toFixed(2);
+        
+        document.getElementById('areaTexto').textContent = hectareas + ' hectáreas';
+        document.getElementById('infoGeometria').style.display = 'none';
+        document.getElementById('exitoGeometria').style.display = 'block';
+    });
+    
+    mapa.on('draw:edited', function (e) {
+        const layers = e.layers;
+        layers.eachLayer(function (layer) {
+            const geojson = layer.toGeoJSON();
+            document.getElementById('geometria').value = JSON.stringify(geojson);
+            
+            const area = L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]);
+            const hectareas = (area / 10000).toFixed(2);
+            document.getElementById('areaTexto').textContent = hectareas + ' hectáreas';
+        });
+    });
+    
+    mapa.on('draw:deleted', function () {
+        document.getElementById('geometria').value = '';
+        document.getElementById('exitoGeometria').style.display = 'none';
+        document.getElementById('infoGeometria').style.display = 'block';
+    });
+    
+    // Búsqueda de dirección usando Nominatim
+    document.getElementById('btnBuscar').addEventListener('click', function() {
+        const direccion = document.getElementById('buscarDireccion').value;
+        if (!direccion) return;
+        
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(direccion)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.length > 0) {
+                    const lat = parseFloat(data[0].lat);
+                    const lon = parseFloat(data[0].lon);
+                    mapa.setView([lat, lon], 16);
+                    
+                    L.marker([lat, lon]).addTo(mapa)
+                        .bindPopup(data[0].display_name)
+                        .openPopup();
+                } else {
+                    alert('No se encontró la ubicación. Intenta con otra búsqueda.');
+                }
+            })
+            .catch(error => {
+                console.error('Error en búsqueda:', error);
+                alert('Error al buscar la ubicación.');
+            });
+    });
+    
+    // Validación del formulario
+    document.getElementById('formRegistro').addEventListener('submit', function(e) {
+        const geometria = document.getElementById('geometria').value;
+        if (!geometria) {
+            e.preventDefault();
+            document.getElementById('infoGeometria').style.display = 'block';
+            document.getElementById('mapa-registro').scrollIntoView({ behavior: 'smooth' });
+        }
+    });
+});
+</script>
+{% endblock %}

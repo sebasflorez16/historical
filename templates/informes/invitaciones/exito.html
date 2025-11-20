@@ -1,0 +1,206 @@
+{% extends 'informes/base_public.html' %}
+{% load static %}
+
+{% block title %}Registro Exitoso - AgroTech Histórico{% endblock %}
+
+{% block extra_css %}
+<style>
+    .exito-container {
+        min-height: 70vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .exito-card {
+        max-width: 700px;
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    
+    .exito-icon {
+        font-size: 5rem;
+        color: #28a745;
+        animation: bounce 0.6s ease-in-out;
+    }
+    
+    @keyframes bounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-20px); }
+    }
+    
+    .info-box {
+        background: #e8f5e9;
+        border-left: 4px solid #4caf50;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 8px;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, #2d5a27, #4a8234);
+        border: none;
+        padding: 12px 30px;
+        font-weight: 600;
+    }
+    
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #1a3009, #2d5016);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    .pasos {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 25px;
+        margin-top: 25px;
+    }
+    
+    .paso {
+        padding: 15px;
+        margin-bottom: 10px;
+        background: white;
+        border-radius: 8px;
+        border-left: 4px solid #4caf50;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="exito-container">
+    <div class="card exito-card">
+        <div class="card-body p-5 text-center">
+            <i class="fas fa-check-circle exito-icon mb-4"></i>
+            
+            <h1 class="text-success mb-3">¡Registro Exitoso!</h1>
+            
+            <p class="lead text-muted mb-4">
+                Tu parcela <strong>"{{ parcela.nombre }}"</strong> ha sido registrada correctamente en nuestro sistema.
+            </p>
+            
+            <!-- Información de la parcela -->
+            <div class="info-box text-start">
+                <h5 class="text-success mb-3">
+                    <i class="fas fa-map-marked-alt me-2"></i>
+                    Información de tu Parcela
+                </h5>
+                <div class="row">
+                    <div class="col-md-6 mb-2">
+                        <strong>Nombre:</strong> {{ parcela.nombre }}
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <strong>Propietario:</strong> {{ parcela.propietario }}
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <strong>Tipo de Cultivo:</strong> {{ parcela.tipo_cultivo|default:"No especificado" }}
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <strong>Área:</strong> {{ parcela.area_hectareas|floatformat:2 }} hectáreas
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <strong>Fecha de Registro:</strong> {{ parcela.fecha_registro|date:"d/m/Y" }}
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <strong>ID de Parcela:</strong> #{{ parcela.id }}
+                    </div>
+                </div>
+            </div>
+            
+            {% if invitacion.costo_servicio > 0 %}
+            <!-- Información de pago -->
+            <div class="alert alert-info mt-4">
+                <h6 class="mb-2">
+                    <i class="fas fa-dollar-sign me-2"></i>
+                    Información de Pago
+                </h6>
+                <p class="mb-0">
+                    El costo del servicio es de <strong>${{ invitacion.costo_servicio|floatformat:2 }}</strong>.
+                    Recibirás instrucciones de pago en el correo electrónico 
+                    <strong>{{ invitacion.email_cliente }}</strong>.
+                </p>
+            </div>
+            {% endif %}
+            
+            <!-- Próximos pasos -->
+            <div class="pasos text-start">
+                <h5 class="text-success mb-3">
+                    <i class="fas fa-list-check me-2"></i>
+                    ¿Qué sigue ahora?
+                </h5>
+                
+                <div class="paso">
+                    <strong>1. Sincronización con EOSDA</strong>
+                    <p class="mb-0 small text-muted mt-1">
+                        Nuestro equipo sincronizará tu parcela con el sistema satelital EOSDA para comenzar a recopilar datos.
+                    </p>
+                </div>
+                
+                <div class="paso">
+                    <strong>2. Recopilación de Datos</strong>
+                    <p class="mb-0 small text-muted mt-1">
+                        Comenzaremos a recopilar datos satelitales históricos (NDVI, NDMI, SAVI) y climáticos de tu parcela.
+                    </p>
+                </div>
+                
+                <div class="paso">
+                    <strong>3. Análisis y Reportes</strong>
+                    <p class="mb-0 small text-muted mt-1">
+                        Recibirás informes periódicos con análisis detallados sobre la salud de tus cultivos y recomendaciones.
+                    </p>
+                </div>
+                
+                <div class="paso">
+                    <strong>4. Notificaciones</strong>
+                    <p class="mb-0 small text-muted mt-1">
+                        Te notificaremos por correo electrónico cuando los datos estén listos y cuando haya información importante sobre tu cultivo.
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Información de contacto -->
+            <div class="mt-4 pt-4 border-top">
+                <h6 class="text-success mb-3">
+                    <i class="fas fa-headset me-2"></i>
+                    ¿Necesitas ayuda?
+                </h6>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="p-3 bg-light rounded">
+                            <i class="fas fa-envelope text-success mb-2"></i>
+                            <div class="small">
+                                <strong>Email de Soporte</strong><br>
+                                <a href="mailto:{{ invitacion.email_cliente }}">{{ invitacion.email_cliente }}</a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if invitacion.telefono_cliente %}
+                    <div class="col-md-6 mb-3">
+                        <div class="p-3 bg-light rounded">
+                            <i class="fas fa-phone text-success mb-2"></i>
+                            <div class="small">
+                                <strong>Teléfono</strong><br>
+                                <a href="tel:{{ invitacion.telefono_cliente }}">{{ invitacion.telefono_cliente }}</a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Botón de cierre -->
+            <div class="mt-4">
+                <p class="text-muted small mb-3">
+                    Puedes cerrar esta ventana. Recibirás un correo de confirmación con todos los detalles.
+                </p>
+                <button onclick="window.close()" class="btn btn-outline-secondary">
+                    <i class="fas fa-times me-2"></i>Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

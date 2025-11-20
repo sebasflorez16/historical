@@ -285,40 +285,139 @@
     <!-- Header de la parcela -->
     <div class="parcela-header">
         <div class="row align-items-center">
-            <div class="col-md-8">
+            <div class="col-md-2 text-center mb-3 mb-md-0">
+                <img src="{% static 'img/Agro Tech logo solo.png' %}" alt="AgroTech" style="max-width: 120px; height: auto;">
+            </div>
+            <div class="col-md-6">
                 <h1><i class="fas fa-map-marked-alt"></i> {{ parcela.nombre }}</h1>
                 <p class="mb-2"><strong>Propietario:</strong> {{ parcela.propietario }}</p>
                 <p class="mb-0"><strong>Tipo de Cultivo:</strong> {{ parcela.tipo_cultivo|default:"No especificado" }}</p>
             </div>
             <div class="col-md-4">
-                <div class="d-flex flex-column gap-2 mb-3">
+                <div class="d-flex flex-column gap-2">
                     <a href="{% url 'informes:lista_parcelas' %}" class="btn btn-light">
                         <i class="fas fa-arrow-left"></i> Volver
                     </a>
                 </div>
                 
-                <div class="btn-group-responsive">
-                    {% if parcela.eosda_sincronizada %}
-                        <a href="{% url 'informes:obtener_datos_historicos' parcela.id %}" class="btn btn-success" 
-                           title="Obtener datos satelitales reales desde EOSDA">
-                            <i class="fas fa-satellite"></i> Datos EOSDA
-                        </a>
-                        <span class="btn btn-outline-success" title="Sincronizada con EOSDA Field ID: {{ parcela.eosda_field_id }}">
-                            <i class="fas fa-check-circle"></i> Sincronizada
-                        </span>
+                <!-- Indicador de Datos Disponibles -->
+                {% if parcela.eosda_sincronizada %}
+                    {% if rango_datos %}
+                    <div class="info-card mb-3" style="border-left: 4px solid var(--agrotech-green); background: linear-gradient(135deg, #f0f9f4 0%, #ffffff 100%);">
+                        <div class="d-flex align-items-center p-3">
+                            <div class="flex-shrink-0" style="width: 50px; height: 50px; background: var(--agrotech-green); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-database" style="color: white; font-size: 1.5rem;"></i>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <strong style="color: var(--agrotech-green); font-size: 1rem;">📊 Datos Disponibles</strong>
+                                <div class="text-muted" style="font-size: 0.85rem; margin-top: 2px;">
+                                    <strong>{{ rango_datos.meses }} meses</strong> de datos 
+                                    <span class="d-none d-md-inline">({{ rango_datos.fecha_inicio|date:"M Y" }} - {{ rango_datos.fecha_fin|date:"M Y" }})</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     {% else %}
-                        <a href="{% url 'informes:sincronizar_con_eosda' parcela.id %}" class="btn btn-warning" 
+                    <div class="info-card mb-3" style="border-left: 4px solid #ffc107; background: linear-gradient(135deg, #fffbf0 0%, #ffffff 100%);">
+                        <div class="d-flex align-items-center p-3">
+                            <div class="flex-shrink-0" style="width: 50px; height: 50px; background: #ffc107; border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-info-circle" style="color: white; font-size: 1.5rem;"></i>
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <strong style="color: #d39e00; font-size: 1rem;">⚠️ Sin Datos Históricos</strong>
+                                <div class="text-muted" style="font-size: 0.85rem; margin-top: 2px;">
+                                    Selecciona un período y obtén datos satelitales
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endif %}
+                
+                <!-- Selector de Rango de Fechas -->
+                {% if parcela.eosda_sincronizada %}
+                <div class="info-card mb-3 p-3">
+                    <label class="form-label fw-bold mb-3" style="color: var(--agrotech-green); font-size: 1.05rem;">
+                        <i class="fas fa-calendar-alt me-2"></i>Período de Análisis
+                    </label>
+                    
+                    <!-- Selector de rangos responsive -->
+                    <div class="row g-2 mb-3" id="rangoSelector">
+                        <div class="col-6 col-md-3">
+                            <input type="radio" class="btn-check" name="rango" id="rango6m" value="6" checked>
+                            <label class="btn btn-outline-success w-100" for="rango6m" style="border-radius: 12px; font-weight: 600;">
+                                <div class="d-none d-md-block" style="font-size: 1.2rem;">6</div>
+                                <div style="font-size: 0.85rem;">meses</div>
+                            </label>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <input type="radio" class="btn-check" name="rango" id="rango12m" value="12">
+                            <label class="btn btn-outline-success w-100" for="rango12m" style="border-radius: 12px; font-weight: 600;">
+                                <div class="d-none d-md-block" style="font-size: 1.2rem;">12</div>
+                                <div style="font-size: 0.85rem;">meses</div>
+                            </label>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <input type="radio" class="btn-check" name="rango" id="rango24m" value="24">
+                            <label class="btn btn-outline-success w-100" for="rango24m" style="border-radius: 12px; font-weight: 600;">
+                                <div class="d-none d-md-block" style="font-size: 1.2rem;">24</div>
+                                <div style="font-size: 0.85rem;">meses</div>
+                            </label>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <input type="radio" class="btn-check" name="rango" id="rangoCustom" value="custom">
+                            <label class="btn btn-outline-success w-100" for="rangoCustom" style="border-radius: 12px; font-weight: 600;">
+                                <div class="d-none d-md-block"><i class="fas fa-calendar-day"></i></div>
+                                <div style="font-size: 0.85rem;">Personalizado</div>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Campos para rango personalizado (ocultos por defecto) -->
+                    <div id="fechasPersonalizadas" class="mt-2" style="display: none;">
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label for="fechaInicio" class="form-label small fw-bold text-muted">
+                                    <i class="fas fa-calendar-plus me-1"></i>Fecha Inicio
+                                </label>
+                                <input type="date" class="form-control" id="fechaInicio" max="{{ fecha_actual }}" style="border-radius: 8px;">
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label for="fechaFin" class="form-label small fw-bold text-muted">
+                                    <i class="fas fa-calendar-check me-1"></i>Fecha Fin
+                                </label>
+                                <input type="date" class="form-control" id="fechaFin" value="{{ fecha_actual }}" max="{{ fecha_actual }}" style="border-radius: 8px;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Botones de acción organizados y responsive -->
+                <div class="d-flex flex-column gap-2">
+                    {% if parcela.eosda_sincronizada %}
+                        <button id="btnObtenerDatos" class="btn btn-success btn-lg" style="border-radius: 12px; font-weight: 600; box-shadow: 0 4px 12px rgba(74, 93, 35, 0.3);"
+                           title="Obtener datos satelitales reales desde EOSDA">
+                            <i class="fas fa-satellite me-2"></i>Datos EOSDA
+                        </button>
+                        <div class="btn btn-outline-success" style="border-radius: 12px; pointer-events: none;" title="Sincronizada con EOSDA Field ID: {{ parcela.eosda_field_id }}">
+                            <i class="fas fa-check-circle me-2"></i>Sincronizada
+                        </div>
+                    {% else %}
+                        <a href="{% url 'informes:sincronizar_con_eosda' parcela.id %}" class="btn btn-warning btn-lg" style="border-radius: 12px; font-weight: 600;"
                            title="Sincronizar parcela con EOSDA primero">
-                            <i class="fas fa-sync-alt"></i> Sincronizar EOSDA
+                            <i class="fas fa-sync-alt me-2"></i>Sincronizar EOSDA
                         </a>
                     {% endif %}
-                    <a href="{% url 'informes:ver_datos_guardados' parcela.id %}" class="btn btn-info"
+                    
+                    <a href="{% url 'informes:ver_datos_guardados' parcela.id %}" class="btn btn-info btn-lg" style="border-radius: 12px; font-weight: 600;"
                        title="Ver datos históricos guardados">
-                        <i class="fas fa-database"></i> Datos Guardados
+                        <i class="fas fa-database me-2"></i>Datos Guardados
                     </a>
-                    <a href="{% url 'informes:generar_informe_pdf' parcela.id %}" class="btn btn-primary"
+                    
+                    <a href="{% url 'informes:generar_informe_pdf' parcela.id %}" class="btn btn-primary btn-lg" style="border-radius: 12px; font-weight: 600;"
                        title="Generar informe PDF con análisis inteligente">
-                        <i class="fas fa-file-download"></i> Generar Informe
+                        <i class="fas fa-file-download me-2"></i>Generar Informe
                     </a>
                 </div>
             </div>
@@ -413,6 +512,38 @@
                 </div>
                 <div class="info-card-body">
                     <div id="mapa-detalle" class="mapa-detalle"></div>
+                    
+                    <!-- Tooltip informativo sobre imágenes satelitales (Colapsable) -->
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-outline-info w-100 d-flex align-items-center justify-content-between" 
+                                type="button" 
+                                data-bs-toggle="collapse" 
+                                data-bs-target="#infoImagenes" 
+                                aria-expanded="false" 
+                                aria-controls="infoImagenes"
+                                style="border-radius: 10px; font-weight: 600;">
+                            <span>
+                                <i class="fas fa-satellite me-2"></i>
+                                ¿Cómo se seleccionan las imágenes satelitales?
+                            </span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="collapse mt-2" id="infoImagenes">
+                            <div class="alert alert-info mb-0" style="background: linear-gradient(135deg, #e3f2fd 0%, #ffffff 100%); border-left: 4px solid #2196f3; border-radius: 10px; font-size: 0.9rem;">
+                                <p class="mb-2" style="color: #424242; line-height: 1.5;">
+                                    El sistema analiza <strong>todas las escenas disponibles</strong> del mes y selecciona automáticamente la <strong>mejor imagen</strong> según:
+                                </p>
+                                <ul class="mb-2 ps-3" style="font-size: 0.85rem; color: #616161;">
+                                    <li><strong>Menor nubosidad</strong> - Cielo despejado</li>
+                                    <li><strong>Mayor calidad</strong> - Mejor resolución</li>
+                                    <li><strong>Una por mes</strong> - Misma escena para todos los índices</li>
+                                </ul>
+                                <div class="p-2" style="background: rgba(33, 150, 243, 0.1); border-radius: 8px; font-size: 0.8rem; color: #1565c0;">
+                                    <i class="fas fa-lightbulb me-1"></i> La fecha corresponde al día de captura de la mejor escena.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -630,6 +761,109 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             `)
             .openOn(mapaDetalle);
+    }
+});
+
+// ========================================
+// 📅 LÓGICA DEL SELECTOR DE RANGOS
+// ========================================
+document.addEventListener('DOMContentLoaded', function() {
+    const rangoSelector = document.getElementById('rangoSelector');
+    const fechasPersonalizadas = document.getElementById('fechasPersonalizadas');
+    const btnObtenerDatos = document.getElementById('btnObtenerDatos');
+    
+    if (!rangoSelector || !btnObtenerDatos) return;
+    
+    // Mostrar/ocultar campos personalizados según selección
+    rangoSelector.addEventListener('change', function(e) {
+        if (e.target.value === 'custom') {
+            fechasPersonalizadas.style.display = 'block';
+        } else {
+            fechasPersonalizadas.style.display = 'none';
+        }
+    });
+    
+    // Función para calcular fechas según rango seleccionado
+    function calcularFechas() {
+        const rangoSeleccionado = document.querySelector('input[name="rango"]:checked');
+        if (!rangoSeleccionado) return null;
+        
+        const hoy = new Date();
+        const fechaFin = new Date(hoy); // Hoy
+        let fechaInicio;
+        
+        if (rangoSeleccionado.value === 'custom') {
+            // Rango personalizado: usar valores de los inputs
+            const inputInicio = document.getElementById('fechaInicio').value;
+            const inputFin = document.getElementById('fechaFin').value;
+            
+            if (!inputInicio || !inputFin) {
+                alert('Por favor, seleccione las fechas de inicio y fin.');
+                return null;
+            }
+            
+            return {
+                fecha_inicio: inputInicio,
+                fecha_fin: inputFin
+            };
+        } else {
+            // Rango predeterminado: calcular desde hoy hacia atrás
+            const meses = parseInt(rangoSeleccionado.value);
+            fechaInicio = new Date(hoy);
+            fechaInicio.setMonth(fechaInicio.getMonth() - meses);
+            
+            // Formatear fechas a YYYY-MM-DD
+            const formatoFecha = (fecha) => {
+                const año = fecha.getFullYear();
+                const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+                const dia = String(fecha.getDate()).padStart(2, '0');
+                return `${año}-${mes}-${dia}`;
+            };
+            
+            return {
+                fecha_inicio: formatoFecha(fechaInicio),
+                fecha_fin: formatoFecha(fechaFin)
+            };
+        }
+    }
+    
+    // Evento del botón "Datos EOSDA"
+    btnObtenerDatos.addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        const fechas = calcularFechas();
+        if (!fechas) return;
+        
+        // Mostrar indicador de carga
+        const textoOriginal = btnObtenerDatos.innerHTML;
+        btnObtenerDatos.disabled = true;
+        btnObtenerDatos.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Obteniendo datos...';
+        
+        // Construir URL con parámetros de fecha
+        const url = new URL('{% url "informes:obtener_datos_historicos" parcela.id %}', window.location.origin);
+        url.searchParams.append('fecha_inicio', fechas.fecha_inicio);
+        url.searchParams.append('fecha_fin', fechas.fecha_fin);
+        
+        // Redirigir a la vista con los parámetros
+        window.location.href = url.toString();
+    });
+    
+    // Inicializar fecha máxima para campos personalizados (hoy)
+    const fechaFin = document.getElementById('fechaFin');
+    const fechaInicio = document.getElementById('fechaInicio');
+    if (fechaFin && fechaInicio) {
+        const hoy = new Date();
+        const fechaMax = hoy.toISOString().split('T')[0];
+        fechaFin.max = fechaMax;
+        fechaInicio.max = fechaMax;
+        
+        // Establecer fecha fin por defecto como hoy
+        fechaFin.value = fechaMax;
+        
+        // Establecer fecha inicio por defecto como 6 meses atrás
+        const hace6Meses = new Date(hoy);
+        hace6Meses.setMonth(hace6Meses.getMonth() - 6);
+        fechaInicio.value = hace6Meses.toISOString().split('T')[0];
     }
 });
 </script>

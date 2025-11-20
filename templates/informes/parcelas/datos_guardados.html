@@ -184,6 +184,25 @@
                     0 4px 15px rgba(255, 193, 7, 0.3);
     }
     
+    /* Badges informativos para datos faltantes */
+    .bg-warning-subtle {
+        background-color: #fff3cd !important;
+        border: 1px solid #ffc107;
+    }
+    
+    .text-warning-emphasis {
+        color: #997404 !important;
+    }
+    
+    .bg-secondary-subtle {
+        background-color: #e9ecef !important;
+        border: 1px solid #6c757d;
+    }
+    
+    .text-secondary-emphasis {
+        color: #495057 !important;
+    }
+    
     /* Valores con colores AgroTech */
     .valor-positivo { 
         color: var(--agrotech-green); 
@@ -1031,21 +1050,33 @@
                                             </small>
                                         {% endif %}
                                     {% else %}
-                                        <span class="text-muted">-</span>
+                                        <small class="badge bg-warning-subtle text-warning-emphasis" 
+                                               data-bs-toggle="tooltip" 
+                                               title="Sin imágenes satelitales disponibles este mes. Posibles causas: nubosidad muy alta (>80%), satélite no pasó por la zona, o imágenes aún no procesadas por EOSDA.">
+                                            <i class="fas fa-cloud"></i> Sin imagen
+                                        </small>
                                     {% endif %}
                                 </td>
                                 <td>
                                     {% if indice.ndmi_promedio %}
                                         <span class="valor-neutro">{{ indice.ndmi_promedio|floatformat:3 }}</span>
                                     {% else %}
-                                        <span class="text-muted">-</span>
+                                        <small class="badge bg-warning-subtle text-warning-emphasis" 
+                                               data-bs-toggle="tooltip" 
+                                               title="Sin imágenes satelitales disponibles este mes.">
+                                            <i class="fas fa-cloud"></i> Sin imagen
+                                        </small>
                                     {% endif %}
                                 </td>
                                 <td>
                                     {% if indice.savi_promedio %}
                                         <span class="valor-neutro">{{ indice.savi_promedio|floatformat:3 }}</span>
                                     {% else %}
-                                        <span class="text-muted">-</span>
+                                        <small class="badge bg-warning-subtle text-warning-emphasis" 
+                                               data-bs-toggle="tooltip" 
+                                               title="Sin imágenes satelitales disponibles este mes.">
+                                            <i class="fas fa-cloud"></i> Sin imagen
+                                        </small>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -1068,14 +1099,32 @@
                                             {{ indice.nubosidad_promedio|floatformat:0 }}%
                                         </span>
                                     {% else %}
-                                        <span class="text-muted">-</span>
+                                        <small class="badge bg-secondary-subtle text-secondary-emphasis" 
+                                               data-bs-toggle="tooltip" 
+                                               title="No hay datos de nubosidad porque no hubo imágenes satelitales este mes.">
+                                            <i class="fas fa-question-circle"></i> N/D
+                                        </small>
                                     {% endif %}
                                 </td>
                                 <td>
                                     {% if indice.fuente_datos == 'EOSDA' %}
-                                        <span class="indice-badge fuente-eosda">EOSDA</span>
+                                        <span class="indice-badge fuente-eosda" 
+                                              data-bs-toggle="tooltip" 
+                                              title="✅ Datos satelitales completos (NDVI, NDMI, SAVI) + datos climáticos">
+                                            <i class="fas fa-satellite"></i> EOSDA
+                                        </span>
+                                    {% elif indice.fuente_datos == 'Solo Clima' %}
+                                        <span class="indice-badge fuente-simulado" 
+                                              data-bs-toggle="tooltip" 
+                                              title="🌦️ Solo datos climáticos reales (temperatura, precipitación). Sin imágenes satelitales disponibles este mes debido a: nubosidad muy alta (>80%), satélite no pasó por la zona, o imágenes aún no procesadas.">
+                                            <i class="fas fa-cloud-sun"></i> Solo Clima
+                                        </span>
                                     {% else %}
-                                        <span class="indice-badge fuente-simulado">Simulado</span>
+                                        <span class="indice-badge fuente-simulado" 
+                                              data-bs-toggle="tooltip" 
+                                              title="⚠️ Datos con fuente desconocida">
+                                            {{ indice.fuente_datos }}
+                                        </span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -1484,6 +1533,12 @@ document.addEventListener('DOMContentLoaded', function() {
             // No permitir cerrar mientras está descargando
             // hideModal();
         }
+    });
+    
+    // Inicializar tooltips de Bootstrap
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
     });
     
     // Animación para slideOut

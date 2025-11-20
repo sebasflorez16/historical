@@ -341,7 +341,9 @@ class EosdaAPIService:
                 'ndvi': self._obtener_indice_temporal_por_field_id(field_id, 'NDVI', fecha_inicio, fecha_fin),
                 'ndmi': self._obtener_indice_temporal_por_field_id(field_id, 'NDMI', fecha_inicio, fecha_fin),
                 'savi': self._obtener_indice_temporal_por_field_id(field_id, 'SAVI', fecha_inicio, fecha_fin),
-                'datos_clima': self._obtener_datos_climaticos_por_field_id(field_id, fecha_inicio, fecha_fin)
+                # ❌ EOSDA Weather API deshabilitado - no tiene cobertura en Colombia
+                # Usamos Open-Meteo como alternativa (ver weather_service.py)
+                'datos_clima': []
             }
             
             logger.info(f"Datos obtenidos exitosamente para field_id {field_id}")
@@ -1090,23 +1092,16 @@ class EosdaAPIService:
                 logger.warning(f"⚠️ No se obtuvieron resultados para tarea {task_id}")
                 return {'error': 'Sin resultados', 'resultados': []}
             
-            # 4. OBTENER DATOS CLIMÁTICOS
-            logger.info(f"🌡️ Obteniendo datos climáticos para {field_id}...")
-            try:
-                datos_clima = self._obtener_datos_climaticos_por_field_id(
-                    field_id=field_id,
-                    fecha_inicio=fecha_inicio,
-                    fecha_fin=fecha_fin
-                )
-                logger.info(f"   ✅ Datos climáticos: {len(datos_clima)} registros")
-            except Exception as e:
-                logger.warning(f"   ⚠️ Error obteniendo datos climáticos: {e}")
-                datos_clima = []
+            # 4. DATOS CLIMÁTICOS - DESHABILITADO
+            # ❌ EOSDA Weather API no tiene cobertura en Colombia
+            # Se usa Open-Meteo como alternativa (ver weather_service.py en views.py)
+            logger.info(f"ℹ️ Datos climáticos: usando Open-Meteo (EOSDA Weather deshabilitado)")
+            datos_clima = []
             
             # 5. GUARDAR EN CACHÉ
             datos_formateados = {
                 'resultados': resultados,
-                'datos_clima': datos_clima,  # Agregar datos climáticos
+                'datos_clima': datos_clima,  # Siempre vacío - Open-Meteo se usa en views.py
                 'field_id': field_id,
                 'indices': indices,
                 'fecha_consulta': datetime.now().isoformat(),

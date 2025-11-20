@@ -29,6 +29,7 @@ from .models import Parcela, IndiceMensual, Informe, ConfiguracionAPI
 from .models_clientes import ClienteInvitacion, RegistroEconomico
 # Importaciones de servicios
 from .services.eosda_api import eosda_service
+from .services.weather_service import OpenMeteoWeatherService
 from .services.analisis_datos import analisis_service
 # Importar generador de PDF
 from .generador_pdf import GeneradorPDFProfesional
@@ -280,6 +281,23 @@ def detalle_parcela(request, parcela_id):
         except Exception as e:
             logger.error(f"Error calculando centro para parcela {parcela.nombre}: {str(e)}")
         
+        # Fecha actual para el selector de rangos
+        from datetime import date
+        fecha_actual = date.today()
+        
+        # Calcular rango de datos disponibles en BD
+        rango_datos = None
+        if indices_recientes:
+            indices_ordenados = sorted(indices_recientes, key=lambda x: (x.año, x.mes))
+            fecha_mas_antigua = date(indices_ordenados[0].año, indices_ordenados[0].mes, 1)
+            fecha_mas_reciente = date(indices_ordenados[-1].año, indices_ordenados[-1].mes, 1)
+            meses_disponibles = len(indices_recientes)
+            rango_datos = {
+                'fecha_inicio': fecha_mas_antigua,
+                'fecha_fin': fecha_mas_reciente,
+                'meses': meses_disponibles
+            }
+        
         contexto = {
             'parcela': parcela,
             'registros_economicos': registros_economicos,
@@ -289,6 +307,8 @@ def detalle_parcela(request, parcela_id):
             'informes': informes,
             'centro_lat': centro_lat,
             'centro_lon': centro_lon,
+            'fecha_actual': fecha_actual.isoformat(),  # Formato YYYY-MM-DD para input date
+            'rango_datos': rango_datos,  # Info sobre datos disponibles
         }
         
         return render(request, 'informes/parcelas/detalle.html', contexto)
@@ -1175,15 +1195,39 @@ def verificar_eosda(request):
 @login_required
 def obtener_datos_historicos(request, parcela_id):
     """
-    Vista para obtener datos históricos de una parcela específica desde EOSDA
+    Vista para obtener datos históricos de una parcela específica desde EOSDA.
+    Soporta rangos predeterminados (6m, 12m, 24m) y personalizado.
+    Requiere obligatoriamente parámetros de fecha.
     """
     try:
         parcela = get_object_or_404(Parcela, id=parcela_id, activa=True)
         
-        # Definir período de análisis optimizado (últimos 3 meses para reducir requests)
+        # Obtener parámetros de fecha desde URL (enviados por el selector de rangos)
         from datetime import date, timedelta
-        fecha_fin = date.today()
-        fecha_inicio = fecha_fin - timedelta(days=90)  # Reducido de 365 a 90 días
+        fecha_inicio_param = request.GET.get('fecha_inicio')
+        fecha_fin_param = request.GET.get('fecha_fin')
+        
+        # Validar que se proporcionaron ambas fechas
+        if not fecha_inicio_param or not fecha_fin_param:
+            logger.warning("⚠️ Intento de obtener datos sin seleccionar rango de fechas")
+            messages.error(request, '⚠️ Debes seleccionar un período de análisis antes de obtener datos satelitales.')
+            return redirect('informes:detalle_parcela', parcela_id=parcela.id)
+        
+        # Parsear y validar formato de fechas
+        try:
+            fecha_inicio = date.fromisoformat(fecha_inicio_param)
+            fecha_fin = date.fromisoformat(fecha_fin_param)
+            logger.info(f"📅 Usando rango seleccionado: {fecha_inicio} a {fecha_fin}")
+        except ValueError:
+            logger.error(f"❌ Formato de fecha inválido: {fecha_inicio_param} - {fecha_fin_param}")
+            messages.error(request, '❌ Formato de fecha inválido. Usa el selector de período de análisis.')
+            return redirect('informes:detalle_parcela', parcela_id=parcela.id)
+        
+        # Validar que fecha_inicio es anterior a fecha_fin
+        if fecha_inicio >= fecha_fin:
+            logger.error(f"❌ Rango inválido: inicio ({fecha_inicio}) debe ser anterior a fin ({fecha_fin})")
+            messages.error(request, '❌ La fecha de inicio debe ser anterior a la fecha de fin.')
+            return redirect('informes:detalle_parcela', parcela_id=parcela.id)
         
         logger.info(f"Obteniendo datos históricos para {parcela.nombre} desde {fecha_inicio} hasta {fecha_fin}")
         
@@ -1335,68 +1379,101 @@ def obtener_datos_historicos(request, parcela_id):
                     indices_creados += 1
                 datos_procesados += 1
                 
-                logger.info(f"✅ Guardado {month:02d}/{year}: NDVI={ndvi_prom:.3f if ndvi_prom else 'N/A'}, "
-                           f"NDMI={ndmi_prom:.3f if ndmi_prom else 'N/A'}, "
-                           f"SAVI={savi_prom:.3f if savi_prom else 'N/A'}, "
+                # Log con formato correcto
+                ndvi_str = f"{ndvi_prom:.3f}" if ndvi_prom else "N/A"
+                ndmi_str = f"{ndmi_prom:.3f}" if ndmi_prom else "N/A"
+                savi_str = f"{savi_prom:.3f}" if savi_prom else "N/A"
+                logger.info(f"✅ Guardado {month:02d}/{year}: NDVI={ndvi_str}, "
+                           f"NDMI={ndmi_str}, SAVI={savi_str}, "
                            f"Nubosidad={nub_prom:.1f}%")
                 
             except Exception as e:
                 logger.error(f"Error guardando datos de {month}/{year}: {str(e)}")
         
-        # Procesar datos climáticos si existen (vienen por día, agrupar por mes)
-        if datos_satelitales.get('datos_clima'):
-            datos_clima_por_mes = defaultdict(lambda: {
-                'temp_promedio': [], 'temp_max': [], 'temp_min': [], 'precipitacion': []
-            })
+        # 🌦️ OBTENER DATOS CLIMÁTICOS CON OPEN-METEO
+        # EOSDA Weather API deshabilitado (sin cobertura en Colombia)
+        # Usamos Open-Meteo como alternativa gratuita con cobertura global
+        logger.info("🌦️ Obteniendo datos climáticos con Open-Meteo...")
+        meses_clima_actualizados = 0
+        try:
+            # Calcular centroide de la parcela para las coordenadas
+            centroide = parcela.geometria.centroid
+            latitud = centroide.y
+            longitud = centroide.x
             
-            for dato in datos_satelitales.get('datos_clima', []):
-                try:
-                    fecha_dato = dato.get('fecha')
-                    if isinstance(fecha_dato, str):
-                        fecha_dato = datetime.fromisoformat(fecha_dato).date()
-                    
-                    clave_mes = (fecha_dato.year, fecha_dato.month)
-                    
-                    if dato.get('temperatura_promedio') is not None:
-                        datos_clima_por_mes[clave_mes]['temp_promedio'].append(dato['temperatura_promedio'])
-                    if dato.get('temperatura_maxima') is not None:
-                        datos_clima_por_mes[clave_mes]['temp_max'].append(dato['temperatura_maxima'])
-                    if dato.get('temperatura_minima') is not None:
-                        datos_clima_por_mes[clave_mes]['temp_min'].append(dato['temperatura_minima'])
-                    if dato.get('precipitacion_total') is not None:
-                        datos_clima_por_mes[clave_mes]['precipitacion'].append(dato['precipitacion_total'])
+            # Obtener datos diarios de Open-Meteo
+            datos_diarios = OpenMeteoWeatherService.obtener_datos_historicos(
+                latitud=latitud,
+                longitud=longitud,
+                fecha_inicio=fecha_inicio,
+                fecha_fin=fecha_fin
+            )
+            
+            if datos_diarios:
+                # Agrupar por mes
+                datos_clima_por_mes = OpenMeteoWeatherService.agrupar_por_mes(datos_diarios)
+                
+                # Actualizar O CREAR registros mensuales con datos climáticos
+                for (year, month), datos in datos_clima_por_mes.items():
+                    try:
+                        # Verificar si ya existe el registro (creado por datos satelitales)
+                        registro_existente = IndiceMensual.objects.filter(
+                            parcela=parcela,
+                            año=year,
+                            mes=month
+                        ).first()
                         
-                except Exception as e:
-                    logger.error(f"Error procesando dato climático: {str(e)}")
-            
-            # Actualizar registros mensuales con datos climáticos
-            for (year, month), datos in datos_clima_por_mes.items():
-                try:
-                    temp_prom = sum(datos['temp_promedio']) / len(datos['temp_promedio']) if datos['temp_promedio'] else None
-                    temp_max = max(datos['temp_max']) if datos['temp_max'] else None
-                    temp_min = min(datos['temp_min']) if datos['temp_min'] else None
-                    precip_total = sum(datos['precipitacion']) if datos['precipitacion'] else None
-                    
-                    registros_actualizados = IndiceMensual.objects.filter(
-                        parcela=parcela,
-                        año=year,
-                        mes=month
-                    ).update(
-                        temperatura_promedio=temp_prom,
-                        temperatura_maxima=temp_max,
-                        temperatura_minima=temp_min,
-                        precipitacion_total=precip_total
-                    )
-                    
-                    if registros_actualizados > 0:
-                        logger.info(f"   🌡️ Datos climáticos actualizados para {month:02d}/{year}: "
-                                   f"Temp={temp_prom:.1f if temp_prom else 'N/A'}°C, "
-                                   f"Precip={precip_total:.1f if precip_total else 'N/A'}mm")
-                except Exception as e:
-                    logger.error(f"Error actualizando datos climáticos de {month}/{year}: {str(e)}")
+                        if registro_existente:
+                            # ACTUALIZAR solo datos climáticos, mantener fuente_datos = 'EOSDA'
+                            registro_existente.temperatura_promedio = datos.get('temperatura_promedio')
+                            registro_existente.temperatura_maxima = datos.get('temperatura_maxima')
+                            registro_existente.temperatura_minima = datos.get('temperatura_minima')
+                            registro_existente.precipitacion_total = datos.get('precipitacion_total')
+                            registro_existente.save(update_fields=[
+                                'temperatura_promedio', 'temperatura_maxima', 
+                                'temperatura_minima', 'precipitacion_total'
+                            ])
+                            accion = "actualizado"
+                        else:
+                            # CREAR nuevo registro solo con datos climáticos (sin índices satelitales)
+                            IndiceMensual.objects.create(
+                                parcela=parcela,
+                                año=year,
+                                mes=month,
+                                temperatura_promedio=datos.get('temperatura_promedio'),
+                                temperatura_maxima=datos.get('temperatura_maxima'),
+                                temperatura_minima=datos.get('temperatura_minima'),
+                                precipitacion_total=datos.get('precipitacion_total'),
+                                fuente_datos='Solo Clima',  # Datos climáticos reales sin imágenes satelitales
+                                calidad_datos='buena'
+                            )
+                            accion = "creado"
+                        
+                        meses_clima_actualizados += 1
+                        temp = datos.get('temperatura_promedio')
+                        precip = datos.get('precipitacion_total')
+                        temp_str = f"{temp:.1f}" if temp else "N/A"
+                        precip_str = f"{precip:.1f}" if precip else "N/A"
+                        logger.info(f"   🌡️ Clima {accion} {month:02d}/{year}: "
+                                   f"Temp={temp_str}°C, Precip={precip_str}mm")
+                    except Exception as e:
+                        logger.error(f"Error actualizando datos climáticos de {month}/{year}: {str(e)}")
+                
+                logger.info(f"✅ Open-Meteo: {meses_clima_actualizados} meses con datos climáticos")
+            else:
+                logger.warning("⚠️ Open-Meteo no retornó datos climáticos")
+                
+        except Exception as e:
+            logger.error(f"Error obteniendo datos climáticos de Open-Meteo: {str(e)}")
         
-        logger.info(f"Datos históricos procesados para {parcela.nombre}: {indices_creados} nuevos registros, {datos_procesados} datos procesados")
+        logger.info(f"Datos históricos procesados para {parcela.nombre}: {indices_creados} nuevos índices, {datos_procesados} meses satelitales, {meses_clima_actualizados} meses climáticos")
         
+        # Calcular meses esperados vs obtenidos
+        meses_esperados = ((fecha_fin.year - fecha_inicio.year) * 12 + fecha_fin.month - fecha_inicio.month) + 1
+        meses_faltantes = meses_esperados - datos_procesados
+        meses_solo_clima = meses_clima_actualizados - datos_procesados  # Meses con clima pero sin satélite
+        
+        # Mensaje informativo según disponibilidad de datos
         if datos_satelitales.get('simulado'):
             messages.info(request, 
                 f'Se obtuvieron datos para {parcela.nombre}. '
@@ -1404,48 +1481,31 @@ def obtener_datos_historicos(request, parcela_id):
                 'Nota: Algunos datos pueden ser simulados si EOSDA no tiene cobertura completa.'
             )
         else:
-            messages.success(request, 
-                f'Datos históricos actualizados para {parcela.nombre}: {indices_creados} nuevos registros, {datos_procesados} datos procesados'
-            )
-        
-        return redirect('informes:detalle_parcela', parcela_id=parcela.id)
-        
-    except Exception as e:
-        for dato in datos_satelitales.get('savi', []):
-            IndiceMensual.objects.filter(
-                parcela=parcela,
-                año=dato['fecha'].year,
-                mes=dato['fecha'].month
-            ).update(
-                savi_promedio=dato['promedio'],
-                savi_maximo=dato.get('maximo'),
-                savi_minimo=dato.get('minimo')
-            )
-        
-        # Procesar datos climáticos
-        for dato in datos_satelitales.get('datos_clima', []):
-            IndiceMensual.objects.filter(
-                parcela=parcela,
-                año=dato['fecha'].year,
-                mes=dato['fecha'].month
-            ).update(
-                temperatura_promedio=dato.get('temperatura_promedio'),
-                temperatura_maxima=dato.get('temperatura_maxima'),
-                temperatura_minima=dato.get('temperatura_minima'),
-                precipitacion_total=dato.get('precipitation_total')
-            )
-        
-        logger.info(f"Datos históricos procesados para {parcela.nombre}: {indices_creados} nuevos registros")
-        
-        if datos_satelitales.get('simulado'):
-            messages.warning(request, 
-                f'Se generaron datos simulados para {parcela.nombre}. '
-                'Verifique la configuración de EOSDA para obtener datos reales.'
-            )
-        else:
-            messages.success(request, 
-                f'Datos históricos actualizados para {parcela.nombre}: {indices_creados} nuevos registros'
-            )
+            # Construir mensaje detallado y claro
+            mensaje_partes = []
+            
+            # Datos satelitales completos
+            if datos_procesados > 0:
+                msg_satelital = f'✅ {datos_procesados} mes(es) con datos satelitales completos (NDVI, NDMI, SAVI + clima)'
+                if indices_creados > 0:
+                    msg_satelital += f' - {indices_creados} nuevo(s)'
+                mensaje_partes.append(msg_satelital)
+            
+            # Meses solo con clima (sin imágenes satelitales)
+            if meses_solo_clima > 0:
+                mensaje_partes.append(
+                    f'🌦️ {meses_solo_clima} mes(es) solo con datos climáticos reales (temperatura, precipitación). '
+                    f'Sin imágenes satelitales disponibles (nubosidad alta o satélite no pasó por la zona).'
+                )
+            
+            # Meses completamente sin datos
+            if meses_faltantes > 0 and meses_solo_clima < meses_faltantes:
+                meses_sin_nada = meses_faltantes - meses_solo_clima
+                if meses_sin_nada > 0:
+                    mensaje_partes.append(f'⚠️ {meses_sin_nada} mes(es) sin ningún dato disponible.')
+            
+            mensaje_base = ' | '.join(mensaje_partes) if mensaje_partes else '✅ Datos actualizados.'
+            messages.success(request, mensaje_base)
         
         return redirect('informes:detalle_parcela', parcela_id=parcela.id)
         
