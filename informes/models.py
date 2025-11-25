@@ -355,6 +355,40 @@ class IndiceMensual(models.Model):
         verbose_name="Calidad de Datos"
     )
     
+    # 🤖 CACHÉ DE ANÁLISIS GEMINI AI
+    analisis_gemini = models.JSONField(
+        null=True, blank=True,
+        verbose_name="Análisis Gemini AI (Caché)",
+        help_text="Caché del análisis generado por Gemini AI para evitar regeneraciones costosas"
+    )
+    fecha_analisis_gemini = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name="Fecha Análisis Gemini",
+        help_text="Fecha y hora del último análisis de Gemini generado"
+    )
+    
+    # 🗺️ METADATOS ESPACIALES PARA ANÁLISIS VISUAL
+    metadatos_imagen = models.JSONField(
+        null=True, blank=True,
+        verbose_name="Metadatos Espaciales de Imagen",
+        help_text="Metadatos completos de EOSDA: coordenadas, bbox, satélite, resolución, etc."
+    )
+    coordenadas_imagen = models.JSONField(
+        null=True, blank=True,
+        verbose_name="Coordenadas de la Imagen",
+        help_text="Bounding box y centroide de la imagen satelital [min_lat, min_lon, max_lat, max_lon]"
+    )
+    satelite_imagen = models.CharField(
+        max_length=50, null=True, blank=True,
+        verbose_name="Satélite Fuente",
+        help_text="Satélite que capturó la imagen (ej: Sentinel-2, Landsat-8)"
+    )
+    resolucion_imagen = models.FloatField(
+        null=True, blank=True,
+        verbose_name="Resolución Espacial (m)",
+        help_text="Resolución espacial de la imagen en metros por píxel"
+    )
+    
     class Meta:
         verbose_name = "Índice Mensual"
         verbose_name_plural = "Índices Mensuales"
