@@ -1907,3 +1907,109 @@ def generar_informe_pdf(request, parcela_id):
         logger.exception(e)
         messages.error(request, f'Error: {str(e)}')
         return redirect('informes:lista_parcelas')
+
+
+# ========================================
+# 🎬 TIMELINE VISUAL - VISTAS
+# ========================================
+
+@login_required
+def timeline_parcela(request, parcela_id):
+    """
+    Vista del Timeline Visual interactivo para una parcela
+    Muestra evolución mes a mes con imágenes satelitales
+    """
+    try:
+        parcela = get_object_or_404(Parcela, id=parcela_id)
+        
+        # Verificar que la parcela esté sincronizada con EOSDA
+        if not parcela.eosda_sincronizada:
+            messages.warning(request, 
+                           'Esta parcela no está sincronizada con EOSDA. '
+                           'Por favor, sincronícela primero.')
+            return redirect('informes:detalle_parcela', parcela_id=parcela_id)
+        
+        # Verificar que tenga datos históricos
+        total_indices = IndiceMensual.objects.filter(parcela=parcela).count()
+        if total_indices == 0:
+            messages.warning(request, 
+                           'No hay datos históricos disponibles para esta parcela. '
+                           'Por favor, obtenga datos satelitales primero.')
+            return redirect('informes:detalle_parcela', parcela_id=parcela_id)
+        
+        # Obtener rango de datos disponibles
+        primer_indice = IndiceMensual.objects.filter(parcela=parcela).order_by('año', 'mes').first()
+        ultimo_indice = IndiceMensual.objects.filter(parcela=parcela).order_by('-año', '-mes').first()
+        
+        rango_datos = {
+            'fecha_inicio': f"{primer_indice.año}-{primer_indice.mes:02d}-01" if primer_indice else None,
+            'fecha_fin': f"{ultimo_indice.año}-{ultimo_indice.mes:02d}-01" if ultimo_indice else None,
+            'total_meses': total_indices,
+        }
+        
+        # Convertir rango_datos a JSON para el template
+        import json
+        rango_datos_json = json.dumps(rango_datos)
+        
+        context = {
+            'parcela': parcela,
+            'rango_datos': rango_datos,
+            'rango_datos_json': rango_datos_json,
+            'total_frames': total_indices,
+        }
+        
+        return render(request, 'informes/parcelas/timeline.html', context)
+        
+    except Exception as e:
+        logger.error(f"Error en timeline_parcela para parcela {parcela_id}: {str(e)}")
+        logger.exception(e)
+        messages.error(request, f'Error cargando timeline: {str(e)}')
+        return redirect('informes:lista_parcelas')
+
+
+@login_required
+def timeline_api(request, parcela_id):
+    """
+    API JSON para obtener datos del timeline
+    Retorna todos los frames procesados con metadata enriquecida
+    """
+    try:
+        from .processors.timeline_processor import TimelineProcessor
+        
+        parcela = get_object_or_404(Parcela, id=parcela_id)
+        
+        # Parámetros opcionales de filtro
+        fecha_inicio_str = request.GET.get('fecha_inicio')
+        fecha_fin_str = request.GET.get('fecha_fin')
+        
+        fecha_inicio = None
+        fecha_fin = None
+        
+        if fecha_inicio_str:
+            try:
+                fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d')
+            except ValueError:
+                pass
+        
+        if fecha_fin_str:
+            try:
+                fecha_fin = datetime.strptime(fecha_fin_str, '%Y-%m-%d')
+            except ValueError:
+                pass
+        
+        # Generar timeline completo usando el procesador
+        timeline_data = TimelineProcessor.generar_timeline_completo(
+            parcela=parcela,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin
+        )
+        
+        return JsonResponse(timeline_data, safe=False)
+        
+    except Exception as e:
+        logger.error(f"Error en timeline_api para parcela {parcela_id}: {str(e)}")
+        logger.exception(e)
+        return JsonResponse({
+            'error': True,
+            'mensaje': f'Error obteniendo datos del timeline: {str(e)}'
+        }, status=500)

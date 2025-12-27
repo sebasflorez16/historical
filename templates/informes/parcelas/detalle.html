@@ -419,6 +419,14 @@
                        title="Generar informe PDF con análisis inteligente">
                         <i class="fas fa-file-download me-2"></i>Generar Informe
                     </button>
+                    
+                    {% if rango_datos and rango_datos.meses > 0 %}
+                    <a href="{% url 'informes:timeline_parcela' parcela.id %}" class="btn btn-lg" 
+                       style="border-radius: 12px; font-weight: 600; background: linear-gradient(135deg, #2e8b57 0%, #ff7a00 100%); color: white; border: none; box-shadow: 0 4px 15px rgba(46, 139, 87, 0.4);"
+                       title="Ver evolución temporal interactiva con imágenes satelitales">
+                        <i class="fas fa-film me-2"></i>Timeline Visual
+                    </a>
+                    {% endif %}
                 </div>
             </div>
         </div>

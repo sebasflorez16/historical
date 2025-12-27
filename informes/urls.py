@@ -56,6 +56,10 @@ urlpatterns = [
     # Generación de informes PDF
     path('parcelas/<int:parcela_id>/generar-informe/', views.generar_informe_pdf, name='generar_informe_pdf'),
     
+    # Timeline Visual
+    path('parcelas/<int:parcela_id>/timeline/', views.timeline_parcela, name='timeline_parcela'),
+    path('parcelas/<int:parcela_id>/timeline/api/', views.timeline_api, name='timeline_api'),
+    
     # API endpoints
     path('api/parcelas/<int:parcela_id>/datos/', views.api_datos_parcela, name='api_datos_parcela'),
 ]
