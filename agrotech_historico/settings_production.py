@@ -223,6 +223,13 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
+    
+    # CSRF Trusted Origins para Railway
+    CSRF_TRUSTED_ORIGINS = [
+        'https://historical-production.up.railway.app',
+        'https://*.railway.app',
+        'https://*.up.railway.app',
+    ]
 
 # Desactivar APPEND_SLASH para evitar redirects 301
 APPEND_SLASH = False
