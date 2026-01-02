@@ -8,7 +8,11 @@ ENV/
 
 # Archivos de configuración sensibles
 .env
-.env.*
+.env.local
+.env.*.local
+
+# Permitir .env.example (plantilla pública)
+!.env.example
 
 # Archivos temporales y de sistema
 __pycache__/
