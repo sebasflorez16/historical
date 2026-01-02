@@ -63,7 +63,6 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'agrotech_historico.middleware.HealthCheckMiddleware',  # Primero: marcar healthcheck
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Servir archivos estáticos
     'django.contrib.sessions.middleware.SessionMiddleware',
