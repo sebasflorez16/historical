@@ -384,8 +384,8 @@ class GeneradorPDFProfesional:
                         'mes': i.mes,
                         'año': i.año,
                         'ndvi_promedio': i.ndvi_promedio,
-                        'ndvi_min': i.ndvi_min,
-                        'ndvi_max': i.ndvi_max,
+                        'ndvi_min': i.ndvi_minimo,
+                        'ndvi_max': i.ndvi_maximo,
                     } for i in indices]
                     analisis_gemini = gemini_service.generar_analisis_informe(
                         parcela_data=parcela_data,
@@ -1405,7 +1405,7 @@ Fuerza {tl.get('fuerza', '').title()}<br/>
         return elements
     
     def _agregar_imagen_con_analisis(self, indice: IndiceMensual, tipo_indice: str, 
-                                      imagen_path: str, descripcion: str, usar_gemini: bool = True) -> List:
+                                      imagen_path: str, descripcion: str, usar_gemini: bool = False) -> List:
         """
         Agrega una imagen satelital con su análisis visual específico usando Gemini AI
         
@@ -1414,7 +1414,7 @@ Fuerza {tl.get('fuerza', '').title()}<br/>
             tipo_indice: 'NDVI', 'NDMI', 'SAVI'
             imagen_path: Ruta a la imagen
             descripcion: Descripción del índice
-            usar_gemini: Si usar Gemini AI para análisis visual (default: True)
+            usar_gemini: Si usar Gemini AI para análisis visual (default: False para ahorrar tokens)
         """
         elements = []
         
