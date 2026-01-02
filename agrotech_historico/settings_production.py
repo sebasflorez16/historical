@@ -174,8 +174,10 @@ GEOS_LIBRARY_PATH = os.getenv('GEOS_LIBRARY_PATH', '/usr/lib/libgeos_c.so')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 
 # EOS Data Analytics (EOSDA) API
+# ⚠️ IMPORTANTE: NO poner el API key aquí, usar solo variable de entorno de Railway
 EOSDA_API_KEY = os.getenv('EOSDA_API_KEY', '')
-EOSDA_BASE_URL = os.getenv('EOSDA_BASE_URL', 'https://api.eos.com')  # Endpoint oficial de EOS
+# Endpoint correcto según documentación oficial: https://doc.eos.com/docs/field-management-api/
+EOSDA_BASE_URL = os.getenv('EOSDA_BASE_URL', 'https://api-connect.eos.com')  # API Connect endpoint
 
 # WeatherAPI (si se usa)
 WEATHERAPI_KEY = os.getenv('WEATHERAPI_KEY', '')

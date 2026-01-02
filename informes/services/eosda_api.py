@@ -26,8 +26,10 @@ class EosdaAPIService:
         self.api_key = settings.EOSDA_API_KEY
         self.base_url = settings.EOSDA_BASE_URL
         self.session = requests.Session()
+        # EOSDA API Connect NO usa headers para autenticación
+        # El API key va como parámetro en la URL: ?api_key=xxx
+        # Documentación: https://doc.eos.com/docs/field-management-api/
         self.session.headers.update({
-            'x-api-key': self.api_key,  # EOSDA usa x-api-key en lugar de Bearer
             'Content-Type': 'application/json'
         })
         
@@ -86,6 +88,28 @@ class EosdaAPIService:
             return False
         return True
     
+    def _build_url(self, endpoint: str) -> str:
+        """
+        Construye la URL con el api_key como parámetro de query
+        Según documentación de EOSDA: https://doc.eos.com/docs/field-management-api/
+        
+        Args:
+            endpoint: El endpoint de la API (ej: '/field-management/fields')
+        
+        Returns:
+            URL completa con api_key como parámetro
+        """
+        # Asegurar que el endpoint no tenga slash al inicio si base_url ya lo tiene
+        endpoint = endpoint.lstrip('/')
+        base = self.base_url.rstrip('/')
+        
+        # Construir URL base
+        url = f"{base}/{endpoint}"
+        
+        # Agregar api_key como parámetro
+        separator = '&' if '?' in url else '?'
+        return f"{url}{separator}api_key={self.api_key}"
+    
     # ========= FIELD MANAGEMENT API =========
     
     def eliminar_campo_eosda(self, field_id: str) -> Dict:
@@ -107,7 +131,7 @@ class EosdaAPIService:
             }
             
         try:
-            url = f"{self.base_url}/field-management/fields/{field_id}"
+            url = self._build_url(f"field-management/{field_id}")
             logger.info(f"Intentando eliminar campo en EOSDA: {field_id}")
             
             response = self.session.delete(url, timeout=30)
@@ -157,7 +181,7 @@ class EosdaAPIService:
             return self._cultivos_validos_cache
             
         try:
-            url = f"{self.base_url}/field-management/fields/crop-types"
+            url = self._build_url("field-management/fields/crop-types")
             response = self.session.get(url, timeout=30)
             
             if response.status_code == 200:
@@ -229,7 +253,7 @@ class EosdaAPIService:
             from django.utils import timezone
             
             # Endpoint correcto según documentación oficial
-            url = f"{self.base_url}/field-management"
+            url = self._build_url("field-management")
             
             # Preparar geometría en formato GeoJSON
             if hasattr(parcela, 'geometria') and parcela.geometria:
@@ -326,7 +350,7 @@ class EosdaAPIService:
         """
         try:
             # Endpoint correcto según documentación oficial
-            url = f"{self.base_url}/field-management/fields"
+            url = self._build_url("field-management/fields")
             response = self.session.get(url, timeout=30)
             
             if response.status_code == 200:
