@@ -102,112 +102,24 @@ class GeminiService:
         indices_mensuales: List[Dict[str, Any]],
         tipo_analisis: str
     ) -> str:
-        """Construir el prompt especializado para análisis agrícola con análisis espacial y visual"""
-        
-        # Información de la parcela
+        """Construir el prompt mínimo para análisis agrícola (optimizado para tokens)"""
+        # Solo los datos clave
         nombre = parcela_data.get('nombre', 'Parcela sin nombre')
         area = parcela_data.get('area_hectareas', 0)
         cultivo = parcela_data.get('tipo_cultivo', 'No especificado')
         propietario = parcela_data.get('propietario', 'No especificado')
-        coordenadas_parcela = parcela_data.get('coordenadas', {})
-        
-        # Construir tabla de datos mensuales
-        tabla_datos = self._construir_tabla_datos(indices_mensuales)
-        
-        # Construir descripción de imágenes con metadatos espaciales
-        desc_imagenes = self._construir_descripcion_imagenes_espacial(indices_mensuales)
-        
-        # Análisis comparativo visual entre meses
-        analisis_comparativo = self._construir_analisis_comparativo_visual(indices_mensuales)
-        
-        # Información espacial de la parcela
-        info_espacial = ""
-        if coordenadas_parcela:
-            centroide = coordenadas_parcela.get('centroide', {})
-            bbox = coordenadas_parcela.get('bbox', {})
-            if centroide:
-                info_espacial = f"""
-**UBICACIÓN ESPACIAL DE LA PARCELA:**
-- Centroide: Latitud {centroide.get('lat', 'N/A'):.4f}, Longitud {centroide.get('lng', 'N/A'):.4f}
-- Bounding Box: {bbox.get('min_lat', 'N/A'):.4f}°N - {bbox.get('max_lat', 'N/A'):.4f}°N, {bbox.get('min_lon', 'N/A'):.4f}°W - {bbox.get('max_lon', 'N/A'):.4f}°W
-- Para referencias espaciales, usa: "zona norte" (cerca de {bbox.get('max_lat', 'N/A'):.4f}°N), "zona sur" (cerca de {bbox.get('min_lat', 'N/A'):.4f}°N), "zona este" (cerca de {bbox.get('max_lon', 'N/A'):.4f}°W), "zona oeste" (cerca de {bbox.get('min_lon', 'N/A'):.4f}°W)
+        # Tabla mínima de datos mensuales
+        tabla = "Mes | NDVI_promedio | NDVI_min | NDVI_max\n" + "\n".join([
+            f"{i.get('mes','')} {i.get('año','')}: {i.get('ndvi_promedio','')}, {i.get('ndvi_min','')}, {i.get('ndvi_max','')}"
+            for i in indices_mensuales
+        ])
+        prompt = f"""
+Analiza la parcela "{nombre}" (cultivo: {cultivo}, área: {area:.2f} ha, propietario: {propietario}) usando solo los datos numéricos mensuales:
+
+{tabla}
+
+Genera un resumen ejecutivo, tendencias y recomendaciones. No repitas datos, sé conciso y técnico.
 """
-        
-        # Prompt base mejorado con análisis espacial y visual
-        prompt = f"""Eres un ingeniero agrónomo experto en teledetección y análisis satelital agrícola con 20 años de experiencia. 
-Analiza la siguiente información de la parcela "{nombre}" ubicada en Colombia, dedicada a {cultivo}, con un área de {area:.2f} hectáreas, propiedad de {propietario}.
-
-{info_espacial}
-
-**DATOS NUMÉRICOS MENSUALES:**
-
-{tabla_datos}
-
-**IMÁGENES SATELITALES DISPONIBLES (Con Metadatos Espaciales):**
-{desc_imagenes}
-
-**ANÁLISIS COMPARATIVO VISUAL ENTRE MESES:**
-{analisis_comparativo}
-
-**TU TAREA - ANÁLISIS ESPACIALMENTE CONSCIENTE:**
-
-1. **ANÁLISIS NUMÉRICO:** Analiza comparativamente mes a mes los índices de vegetación (NDVI, NDMI, SAVI).
-
-2. **ANÁLISIS VISUAL Y ESPACIAL:** Si hay imágenes disponibles, identifica:
-   - Cambios de color entre meses (ej: "zona sur más verde en Marzo vs Febrero")
-   - Patrones espaciales de vegetación (ej: "mayor vigor en zona norte", "estrés visible en zona este")
-   - Variaciones dentro de la parcela (ej: "heterogeneidad norte-sur", "uniformidad este-oeste")
-   - Diferencias visuales en las imágenes NDVI/NDMI/SAVI entre meses consecutivos
-
-3. **CONTEXTO GEOGRÁFICO:** Usa las coordenadas para hacer referencias espaciales precisas:
-   - "zona norte" (latitudes mayores)
-   - "zona sur" (latitudes menores)
-   - "zona este" (longitudes mayores/menos negativas)
-   - "zona oeste" (longitudes menores/más negativas)
-
-4. **METADATOS DE CALIDAD:** Considera:
-   - Nubosidad de cada imagen (>40% = calidad reducida)
-   - Fechas de captura satelital (gaps temporales)
-   - Resolución espacial (detalle disponible)
-   - Satélite fuente (Sentinel-2 = 10m, Landsat = 30m)
-
-5. **TENDENCIAS Y ANOMALÍAS:** Detecta:
-   - Cambios significativos en salud vegetal (temporal y espacial)
-   - Patrones climáticos que expliquen las variaciones observadas
-   - Períodos críticos (estrés hídrico, exceso de humedad, bajas temperaturas)
-
-6. **RECOMENDACIONES ESPACIALMENTE ESPECÍFICAS:** Proporciona acciones concretas:
-   - Zonas específicas que requieren atención (ej: "inspeccionar zona sur por baja NDVI")
-   - Acciones diferenciadas por área de la parcela si hay heterogeneidad
-   - Monitoreo focalizado en zonas de cambio
-
-**FORMATO DE RESPUESTA:**
-Estructura tu respuesta EXACTAMENTE con estas secciones (usa estos títulos literales):
-
-### RESUMEN EJECUTIVO
-[Escribe un resumen claro y conciso de 200-300 palabras sobre el estado general de la parcela, incluyendo referencias espaciales y visuales si hay imágenes disponibles]
-
-### ANÁLISIS DE TENDENCIAS
-[Analiza mes a mes las tendencias numéricas y visuales. Identifica patrones espaciales y temporales. Menciona zonas específicas si hay heterogeneidad visible]
-
-### ANÁLISIS VISUAL DE IMÁGENES
-[Si hay imágenes: describe cambios de color, patrones espaciales, y variaciones visuales entre meses. Usa referencias como "zona norte/sur/este/oeste". Si no hay imágenes: escribe "Análisis visual no disponible - sin imágenes satelitales"]
-
-### RECOMENDACIONES
-[Lista 4-6 recomendaciones prácticas y específicas. Incluye acciones espacialmente focalizadas si hay heterogeneidad. Prioriza por urgencia]
-
-### ALERTAS
-[Identifica situaciones críticas, incluyendo alertas espaciales (ej: "zona sur requiere inspección urgente"). Si no hay alertas: "No se detectaron alertas críticas"]
-
-**IMPORTANTE:**
-- Usa lenguaje profesional pero comprensible para un agricultor.
-- Sé específico con meses, valores, y zonas espaciales.
-- Si hay imágenes, describe lo que ves visualmente.
-- Si los datos son limitados o de baja calidad, indícalo claramente.
-- Enfócate en información accionable, no solo descriptiva.
-- Las referencias espaciales hacen el análisis más útil y específico.
-"""
-        
         return prompt
     
     def _construir_tabla_datos(self, indices_mensuales: List[Dict[str, Any]]) -> str:

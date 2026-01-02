@@ -4,7 +4,7 @@
 
 Tu **API Key de Google Gemini** ha sido **reportada como filtrada (leaked)** y Google la ha bloqueado automáticamente.
 
-**Clave comprometida:** `AIzaSyD8rKVhTT85oMuJQtK1CuZwN9GrKYiZ1DU`
+**Clave comprometida:** `AIzaSy...` (REMOVIDA POR SEGURIDAD)
 
 ### ¿Por qué pasó esto?
 - La API key fue expuesta públicamente (probablemente en GitHub)
@@ -32,7 +32,7 @@ Reemplaza la línea de `GEMINI_API_KEY` en el archivo `.env`:
 nano .env
 
 # Busca esta línea:
-GEMINI_API_KEY=AIzaSyD8rKVhTT85oMuJQtK1CuZwN9GrKYiZ1DU
+GEMINI_API_KEY=tu_nueva_api_key_aqui
 
 # Reemplázala con tu nueva key:
 GEMINI_API_KEY=TU_NUEVA_API_KEY_AQUI

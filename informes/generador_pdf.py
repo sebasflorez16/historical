@@ -338,117 +338,68 @@ class GeneradorPDFProfesional:
             analisis_ndvi, analisis_ndmi, analisis_savi, tendencias
         )
         
-        # 🤖 ANÁLISIS CON GEMINI AI (con caché y soporte de imágenes)
+        # 🤖 ANÁLISIS CON GEMINI AI (caché optimizado y control de tokens)
         analisis_gemini = None
+        motivo_regeneracion = None
         if gemini_service:
             try:
                 # VERIFICAR SI EXISTE ANÁLISIS EN CACHÉ
                 ultimo_indice = indices.order_by('-año', '-mes').first()
                 if ultimo_indice and ultimo_indice.analisis_gemini and ultimo_indice.fecha_analisis_gemini:
-                    # Verificar si el caché tiene menos de 30 días
                     from datetime import timedelta
                     edad_cache = datetime.now() - ultimo_indice.fecha_analisis_gemini.replace(tzinfo=None)
-                    
+                    # Verificar si el caché tiene menos de 30 días
                     if edad_cache < timedelta(days=30):
-                        logger.info(f"✅ Usando análisis de Gemini desde caché (edad: {edad_cache.days} días)")
-                        analisis_gemini = ultimo_indice.analisis_gemini
+                        # Verificar si los datos NDVI/clima han cambiado desde el análisis
+                        datos_actuales = {
+                            'ndvi': ultimo_indice.ndvi_promedio,
+                            'clima': getattr(ultimo_indice, 'clima', None),
+                        }
+                        datos_analizados = ultimo_indice.analisis_gemini.get('datos_usados', {})
+                        if datos_actuales == datos_analizados:
+                            logger.info(f"✅ Usando análisis de Gemini desde caché (edad: {edad_cache.days} días)")
+                            analisis_gemini = ultimo_indice.analisis_gemini
+                        else:
+                            motivo_regeneracion = 'Datos NDVI/clima cambiaron'
+                            logger.info(f"♻️ Regenerando análisis: datos cambiaron desde el último análisis")
                     else:
+                        motivo_regeneracion = 'Caché expirado'
                         logger.info(f"⚠️ Caché expirado ({edad_cache.days} días), regenerando análisis")
-                        analisis_gemini = None
-                
+                else:
+                    motivo_regeneracion = 'No hay caché previo'
                 # SI NO HAY CACHÉ VÁLIDO, GENERAR NUEVO ANÁLISIS
                 if not analisis_gemini:
-                    logger.info(f"🤖 Generando análisis con Gemini AI para parcela {parcela.nombre}")
-                    
-                    # Preparar datos de la parcela con información espacial
+                    logger.info(f"🤖 Generando análisis con Gemini AI para parcela {parcela.nombre} (motivo: {motivo_regeneracion})")
+                    # Preparar datos mínimos de la parcela
                     parcela_data = {
                         'nombre': parcela.nombre,
                         'area_hectareas': float(parcela.area_hectareas) if parcela.area_hectareas else 0,
                         'tipo_cultivo': parcela.tipo_cultivo or 'No especificado',
                         'propietario': str(parcela.propietario) if parcela.propietario else 'No especificado',
-                        'coordenadas': {}
                     }
-                    
-                    # 🗺️ AGREGAR INFORMACIÓN ESPACIAL DE LA PARCELA
-                    if parcela.centroide:
-                        parcela_data['coordenadas']['centroide'] = {
-                            'lat': parcela.centroide.y,
-                            'lng': parcela.centroide.x
-                        }
-                    
-                    if parcela.geometria:
-                        # Calcular bounding box
-                        extent = parcela.geometria.extent  # (xmin, ymin, xmax, ymax)
-                        parcela_data['coordenadas']['bbox'] = {
-                            'min_lon': extent[0],
-                            'min_lat': extent[1],
-                            'max_lon': extent[2],
-                            'max_lat': extent[3]
-                        }
-                    
-                    indices_mensuales = []
-                    imagenes_paths = []
-                    
-                    for idx, dato in zip(indices, datos):
-                        # 📊 DATOS MENSUALES CON METADATOS ESPACIALES
-                        mes_data = {
-                            'periodo': dato['mes'],
-                            'ndvi_promedio': dato.get('ndvi'),
-                            'ndmi_promedio': dato.get('ndmi'),
-                            'savi_promedio': dato.get('savi'),
-                            'nubosidad_promedio': idx.nubosidad_promedio,
-                            'nubosidad_imagen': idx.nubosidad_imagen,
-                            'temperatura_promedio': dato.get('temperatura'),
-                            'precipitacion_total': dato.get('precipitacion'),
-                            'calidad_datos': idx.calidad_datos or 'BUENA',
-                            'tiene_imagen_ndvi': bool(idx.imagen_ndvi),
-                            'tiene_imagen_ndmi': bool(idx.imagen_ndmi),
-                            'tiene_imagen_savi': bool(idx.imagen_savi)
-                        }
-                        
-                        # 🗺️ AGREGAR METADATOS ESPACIALES DE LAS IMÁGENES
-                        if idx.fecha_imagen:
-                            mes_data['fecha_imagen'] = idx.fecha_imagen.isoformat()
-                        
-                        if idx.satelite_imagen:
-                            mes_data['satelite_imagen'] = idx.satelite_imagen
-                        
-                        if idx.resolucion_imagen:
-                            mes_data['resolucion_imagen'] = idx.resolucion_imagen
-                        
-                        if idx.coordenadas_imagen:
-                            mes_data['coordenadas_imagen'] = idx.coordenadas_imagen
-                        
-                        if idx.metadatos_imagen:
-                            mes_data['metadatos_imagen'] = idx.metadatos_imagen
-                        
-                        indices_mensuales.append(mes_data)
-                        
-                        # 📸 RECOPILAR IMÁGENES SATELITALES
-                        if idx.imagen_ndvi and idx.imagen_ndvi.path:
-                            if os.path.exists(idx.imagen_ndvi.path):
-                                imagenes_paths.append(idx.imagen_ndvi.path)
-                        if idx.imagen_ndmi and idx.imagen_ndmi.path:
-                            if os.path.exists(idx.imagen_ndmi.path):
-                                imagenes_paths.append(idx.imagen_ndmi.path)
-                    
-                    # Generar análisis con Gemini (con imágenes y metadatos espaciales)
+                    # Solo enviar imágenes si el usuario lo solicita explícitamente (por ahora, nunca por defecto)
+                    imagenes_paths = None  # Cambia a lista si quieres habilitar imágenes
+                    # Solo enviar los índices estrictamente necesarios
+                    indices_minimos = [{
+                        'mes': i.mes,
+                        'año': i.año,
+                        'ndvi_promedio': i.ndvi_promedio,
+                        'ndvi_min': i.ndvi_min,
+                        'ndvi_max': i.ndvi_max,
+                    } for i in indices]
                     analisis_gemini = gemini_service.generar_analisis_informe(
                         parcela_data=parcela_data,
-                        indices_mensuales=indices_mensuales,
-                        imagenes_paths=imagenes_paths if imagenes_paths else None,
+                        indices_mensuales=indices_minimos,
+                        imagenes_paths=imagenes_paths,
                         tipo_analisis='completo'
                     )
-                    
-                    # GUARDAR EN CACHÉ
-                    if analisis_gemini and not analisis_gemini.get('error'):
-                        ultimo_indice.analisis_gemini = analisis_gemini
+                    # Guardar los datos usados para comparación futura
+                    if analisis_gemini is not None:
+                        ultimo_indice.analisis_gemini = {**analisis_gemini, 'datos_usados': datos_actuales}
                         ultimo_indice.fecha_analisis_gemini = datetime.now()
                         ultimo_indice.save(update_fields=['analisis_gemini', 'fecha_analisis_gemini'])
-                        logger.info("💾 Análisis guardado en caché")
-                    
+                        logger.info("💾 Análisis guardado en caché (con datos usados para control de duplicados)")
                     logger.info("✅ Análisis de Gemini generado exitosamente")
-                
             except Exception as e:
                 logger.error(f"❌ Error generando análisis con Gemini: {str(e)}")
                 analisis_gemini = None
@@ -1251,14 +1202,16 @@ Fuerza {tl.get('fuerza', '').title()}<br/>
                     ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
                     ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
                     ('FONTSIZE', (0, 0), (-1, -1), 9),
-                    ('TEXTCOLOR', (0, 0), (-1, -1), self.colores['gris_oscuro']),
-                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('TEXTCOLOR', (0, 1), (-1, -1), self.colores['gris_oscuro']),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                    ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, self.colores['gris_claro']]),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
                     ('TOPPADDING', (0, 0), (-1, -1), 5),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 8),
                 ]))
                 
                 elements.append(tabla_metadatos)

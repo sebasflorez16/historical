@@ -227,7 +227,7 @@ python manage.py generar_analisis_gemini --todas --meses 6 --con-imagenes --forz
 ### **Variables de Entorno (.env):**
 
 ```env
-GEMINI_API_KEY=AIzaSyD8rKVhTT85oMuJQtK1CuZwN9GrKYiZ1DU
+GEMINI_API_KEY=tu_api_key_aqui
 ```
 
 ### **Settings (settings.py):**

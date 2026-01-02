@@ -76,8 +76,8 @@ self.model = genai.GenerativeModel('gemini-2.0-flash')  # ✅ 1,500 req/día
 ### 2. Archivo: `.env`
 
 ```bash
-# API Key actualizada y válida
-GEMINI_API_KEY=AIzaSyAEEAIKbNtUzO6BeGZUorOLPGM_Yh62ahc
+# API Key de Google Gemini (obtener en: https://makersuite.google.com/app/apikey)
+GEMINI_API_KEY=tu_api_key_aqui
 ```
 
 ### 3. Correcciones de Formato
