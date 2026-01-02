@@ -153,7 +153,16 @@ GEOS_LIBRARY_PATH = os.getenv('GEOS_LIBRARY_PATH', '/usr/lib/libgeos_c.so')
 
 # APIs externas
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+
+# EOS Data Analytics (EOSDA) API
 EOSDA_API_KEY = os.getenv('EOSDA_API_KEY', '')
+EOSDA_BASE_URL = os.getenv('EOSDA_BASE_URL', 'https://api-connect.eos.com')  # Sin /api al final
+
+# WeatherAPI (si se usa)
+WEATHERAPI_KEY = os.getenv('WEATHERAPI_KEY', '')
+
+# SatImagery API (si se usa)
+SATIMAGERY_API_KEY = os.getenv('SATIMAGERY_API_KEY', '')
 
 # Email configuration
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
