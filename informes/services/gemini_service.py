@@ -102,25 +102,251 @@ class GeminiService:
         indices_mensuales: List[Dict[str, Any]],
         tipo_analisis: str
     ) -> str:
-        """Construir el prompt mínimo para análisis agrícola (optimizado para tokens)"""
-        # Solo los datos clave
+        """
+        Construir prompt enriquecido para análisis agrícola profesional con Gemini.
+        Incluye serie temporal completa, contexto agronómico, clima y recomendaciones.
+        """
+        # Información básica de la parcela
         nombre = parcela_data.get('nombre', 'Parcela sin nombre')
         area = parcela_data.get('area_hectareas', 0)
         cultivo = parcela_data.get('tipo_cultivo', 'No especificado')
         propietario = parcela_data.get('propietario', 'No especificado')
-        # Tabla mínima de datos mensuales
-        tabla = "Mes | NDVI_promedio | NDVI_min | NDVI_max\n" + "\n".join([
-            f"{i.get('mes','')} {i.get('año','')}: {i.get('ndvi_promedio','')}, {i.get('ndvi_min','')}, {i.get('ndvi_max','')}"
-            for i in indices_mensuales
-        ])
-        prompt = f"""
-Analiza la parcela "{nombre}" (cultivo: {cultivo}, área: {area:.2f} ha, propietario: {propietario}) usando solo los datos numéricos mensuales:
+        ubicacion = parcela_data.get('ubicacion', 'No especificada')
+        
+        # Determinar si hay cultivo activo o terreno sin sembrar
+        tiene_cultivo = cultivo and cultivo.lower() not in ['no especificado', 'sin cultivo', 'ninguno', '']
+        contexto_cultivo = f"cultivo de {cultivo}" if tiene_cultivo else "terreno sin cultivo activo (análisis para planificación)"
+        
+        # Construir tabla enriquecida con serie temporal completa
+        tabla = self._construir_tabla_temporal_enriquecida(indices_mensuales)
+        
+        # Obtener estadísticas clave de la serie temporal
+        estadisticas = self._calcular_estadisticas_serie_temporal(indices_mensuales)
+        
+        # Construir el prompt profesional según el tipo de análisis
+        if tiene_cultivo:
+            prompt = f"""**ACTÚA COMO UN AGRÓNOMO EXPERTO EN AGRICULTURA DE PRECISIÓN**
+
+Analiza la siguiente parcela agrícola y proporciona un análisis técnico profesional:
+
+**INFORMACIÓN DE LA PARCELA:**
+- Nombre: {nombre}
+- Cultivo: {cultivo}
+- Área: {area:.2f} hectáreas
+- Ubicación: {ubicacion}
+- Propietario: {propietario}
+
+**SERIE TEMPORAL DE DATOS SATELITALES Y CLIMÁTICOS (ÚLTIMOS MESES):**
 
 {tabla}
 
-Genera un resumen ejecutivo, tendencias y recomendaciones. No repitas datos, sé conciso y técnico.
-"""
+**ESTADÍSTICAS GENERALES:**
+{estadisticas}
+
+**TU MISIÓN COMO AGRÓNOMO:**
+
+1. **ANÁLISIS DE TENDENCIAS**: Analiza la evolución temporal de los índices de vegetación (NDVI, NDMI, SAVI) y clima. ¿Qué patrones observas? ¿Hay crecimiento, estancamiento o deterioro de la cobertura vegetal?
+
+2. **DETECCIÓN DE ALERTAS**: Identifica cualquier signo de:
+   - Estrés hídrico (NDMI bajo, precipitación insuficiente)
+   - Estrés por calor o sequía (temperaturas extremas, NDVI descendente)
+   - Posibles plagas o enfermedades (caídas abruptas de NDVI sin causa climática)
+   - Anomalías en la calidad de los datos o nubosidad excesiva
+   - Variabilidad espacial excesiva (NDVI max vs min muy diferentes)
+
+3. **RECOMENDACIONES PRÁCTICAS**: Proporciona acciones concretas que el agricultor debe tomar:
+   - Riego: ¿necesita más o menos agua? ¿cuándo?
+   - Fertilización: ¿hay síntomas de déficit nutricional?
+   - Manejo de plagas: ¿se recomienda inspección en campo?
+   - Optimización de prácticas: ¿qué puede mejorar?
+
+4. **PROYECCIÓN Y PLANIFICACIÓN**: Basándote en las tendencias, ¿qué esperas en los próximos meses? ¿Qué debe anticipar el agricultor?
+
+**FORMATO DE RESPUESTA:**
+Estructura tu análisis en 4 secciones claramente diferenciadas:
+
+### RESUMEN EJECUTIVO
+[Resumen de 2-3 frases del estado actual de la parcela y hallazgos principales]
+
+### ANÁLISIS DE TENDENCIAS
+[Análisis detallado de la evolución temporal, patrones estacionales y comportamiento de índices]
+
+### ALERTAS Y DIAGNÓSTICO
+[Lista de alertas, riesgos identificados y diagnóstico de posibles problemas]
+
+### RECOMENDACIONES
+[Acciones concretas y priorizadas que el agricultor debe implementar]
+
+**IMPORTANTE:** Sé técnico pero comprensible. No repitas los datos numéricos, sino interprétalos. Enfócate en insights accionables."""
+        else:
+            # Prompt para terreno sin cultivo (análisis para planificación)
+            prompt = f"""**ACTÚA COMO UN AGRÓNOMO EXPERTO EN PLANIFICACIÓN AGRÍCOLA**
+
+Analiza la siguiente parcela SIN CULTIVO ACTIVO y proporciona recomendaciones para su aprovechamiento:
+
+**INFORMACIÓN DE LA PARCELA:**
+- Nombre: {nombre}
+- Estado: Terreno sin cultivo activo (preparación o planificación)
+- Área: {area:.2f} hectáreas
+- Ubicación: {ubicacion}
+- Propietario: {propietario}
+
+**SERIE TEMPORAL DE DATOS SATELITALES Y CLIMÁTICOS (ÚLTIMOS MESES):**
+
+{tabla}
+
+**ESTADÍSTICAS GENERALES:**
+{estadisticas}
+
+**TU MISIÓN COMO AGRÓNOMO:**
+
+1. **ANÁLISIS DE CONDICIONES BASE**: Evalúa la evolución de la cobertura vegetal natural (malezas, vegetación espontánea) y condiciones climáticas. ¿Qué indica sobre el potencial del suelo?
+
+2. **EVALUACIÓN DE APTITUD**: Basándote en los datos de NDVI, NDMI, clima y temporada, ¿qué cultivos serían más apropiados para esta parcela?
+
+3. **RECOMENDACIONES DE PREPARACIÓN**: ¿Qué acciones debe tomar el propietario antes de sembrar? (limpieza, riego, fertilización, análisis de suelo, etc.)
+
+4. **VENTANA ÓPTIMA DE SIEMBRA**: Según las condiciones climáticas observadas, ¿cuál sería el mejor momento para iniciar un cultivo?
+
+**FORMATO DE RESPUESTA:**
+Estructura tu análisis en 4 secciones:
+
+### RESUMEN EJECUTIVO
+[Resumen del potencial de la parcela y recomendación principal]
+
+### ANÁLISIS DE CONDICIONES BASE
+[Evaluación de cobertura vegetal, clima y aptitud del terreno]
+
+### ALERTAS Y CONSIDERACIONES
+[Advertencias, limitaciones o riesgos a tener en cuenta antes de sembrar]
+
+### RECOMENDACIONES
+[Acciones concretas para preparación del terreno, cultivos sugeridos y calendario]
+
+**IMPORTANTE:** Sé técnico pero comprensible. Enfócate en insights accionables para ayudar al propietario a tomar decisiones."""
+        
         return prompt
+    
+    def _construir_tabla_temporal_enriquecida(self, indices_mensuales: List[Dict[str, Any]]) -> str:
+        """
+        Construir tabla enriquecida con serie temporal completa de índices y clima.
+        Incluye NDVI, NDMI, SAVI, temperatura, precipitación, nubosidad y calidad.
+        """
+        if not indices_mensuales:
+            return "No hay datos mensuales disponibles para análisis."
+        
+        # Encabezado de la tabla
+        tabla = "| Período | NDVI | NDMI | SAVI | Temp (°C) | Precip (mm) | Nubosidad | Calidad |\n"
+        tabla += "|---------|------|------|------|-----------|-------------|-----------|----------|\n"
+        
+        for dato in indices_mensuales:
+            # Período (mes/año)
+            periodo = dato.get('periodo', 'N/A')
+            
+            # Índices de vegetación (promedio, min, max)
+            ndvi_prom = dato.get('ndvi_promedio')
+            ndvi_min = dato.get('ndvi_minimo') or dato.get('ndvi_min')  # Compatibilidad
+            ndvi_max = dato.get('ndvi_maximo') or dato.get('ndvi_max')
+            
+            if ndvi_prom is not None:
+                ndvi_str = f"{ndvi_prom:.3f}"
+                if ndvi_min is not None and ndvi_max is not None:
+                    ndvi_str += f" ({ndvi_min:.3f}-{ndvi_max:.3f})"
+            else:
+                ndvi_str = 'N/A'
+            
+            # NDMI (índice de humedad)
+            ndmi_prom = dato.get('ndmi_promedio')
+            ndmi_min = dato.get('ndmi_minimo') or dato.get('ndmi_min')
+            ndmi_max = dato.get('ndmi_maximo') or dato.get('ndmi_max')
+            
+            if ndmi_prom is not None:
+                ndmi_str = f"{ndmi_prom:.3f}"
+                if ndmi_min is not None and ndmi_max is not None:
+                    ndmi_str += f" ({ndmi_min:.3f}-{ndmi_max:.3f})"
+            else:
+                ndmi_str = 'N/A'
+            
+            # SAVI (índice ajustado de vegetación)
+            savi_prom = dato.get('savi_promedio')
+            savi_min = dato.get('savi_minimo') or dato.get('savi_min')
+            savi_max = dato.get('savi_maximo') or dato.get('savi_max')
+            
+            if savi_prom is not None:
+                savi_str = f"{savi_prom:.3f}"
+                if savi_min is not None and savi_max is not None:
+                    savi_str += f" ({savi_min:.3f}-{savi_max:.3f})"
+            else:
+                savi_str = 'N/A'
+            
+            # Clima
+            temp = dato.get('temperatura_promedio')
+            temp_str = f"{temp:.1f}" if temp is not None else 'N/A'
+            
+            precip = dato.get('precipitacion_total')
+            precip_str = f"{precip:.1f}" if precip is not None else 'N/A'
+            
+            nubosidad = dato.get('nubosidad_promedio')
+            nubosidad_str = f"{nubosidad:.0f}%" if nubosidad is not None else 'N/A'
+            
+            calidad = dato.get('calidad_datos', 'N/A')
+            
+            # Fila de la tabla
+            tabla += f"| {periodo} | {ndvi_str} | {ndmi_str} | {savi_str} | {temp_str} | {precip_str} | {nubosidad_str} | {calidad} |\n"
+        
+        # Nota explicativa
+        tabla += "\n*Nota: Valores entre paréntesis indican (mínimo-máximo) del índice en el período.*"
+        
+        return tabla
+    
+    def _calcular_estadisticas_serie_temporal(self, indices_mensuales: List[Dict[str, Any]]) -> str:
+        """
+        Calcular estadísticas descriptivas de la serie temporal para dar contexto a Gemini.
+        Incluye tendencias, promedios, variabilidad y alertas numéricas.
+        """
+        if not indices_mensuales:
+            return "No hay datos suficientes para calcular estadísticas."
+        
+        # Extraer valores válidos
+        ndvi_values = [d.get('ndvi_promedio') for d in indices_mensuales if d.get('ndvi_promedio') is not None]
+        ndmi_values = [d.get('ndmi_promedio') for d in indices_mensuales if d.get('ndmi_promedio') is not None]
+        temp_values = [d.get('temperatura_promedio') for d in indices_mensuales if d.get('temperatura_promedio') is not None]
+        precip_values = [d.get('precipitacion_total') for d in indices_mensuales if d.get('precipitacion_total') is not None]
+        
+        stats = []
+        
+        # NDVI
+        if ndvi_values:
+            ndvi_mean = sum(ndvi_values) / len(ndvi_values)
+            ndvi_min = min(ndvi_values)
+            ndvi_max = max(ndvi_values)
+            ndvi_trend = "creciente" if len(ndvi_values) >= 2 and ndvi_values[-1] > ndvi_values[0] else "decreciente" if len(ndvi_values) >= 2 and ndvi_values[-1] < ndvi_values[0] else "estable"
+            stats.append(f"- **NDVI**: Promedio {ndvi_mean:.3f} | Rango {ndvi_min:.3f}-{ndvi_max:.3f} | Tendencia: {ndvi_trend}")
+        
+        # NDMI
+        if ndmi_values:
+            ndmi_mean = sum(ndmi_values) / len(ndmi_values)
+            ndmi_min = min(ndmi_values)
+            ndmi_max = max(ndmi_values)
+            stats.append(f"- **NDMI**: Promedio {ndmi_mean:.3f} | Rango {ndmi_min:.3f}-{ndmi_max:.3f}")
+        
+        # Temperatura
+        if temp_values:
+            temp_mean = sum(temp_values) / len(temp_values)
+            temp_min = min(temp_values)
+            temp_max = max(temp_values)
+            stats.append(f"- **Temperatura**: Promedio {temp_mean:.1f}°C | Rango {temp_min:.1f}-{temp_max:.1f}°C")
+        
+        # Precipitación
+        if precip_values:
+            precip_total = sum(precip_values)
+            precip_mean = precip_total / len(precip_values)
+            stats.append(f"- **Precipitación**: Total {precip_total:.1f}mm | Promedio mensual {precip_mean:.1f}mm")
+        
+        # Número de meses con datos
+        stats.append(f"- **Período analizado**: {len(indices_mensuales)} meses de datos")
+        
+        return "\n".join(stats) if stats else "Datos insuficientes para estadísticas."
     
     def _construir_tabla_datos(self, indices_mensuales: List[Dict[str, Any]]) -> str:
         """Construir tabla de datos mensuales en formato texto"""
