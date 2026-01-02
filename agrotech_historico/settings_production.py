@@ -35,6 +35,7 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # Agregar dominios de Railway
 ALLOWED_HOSTS.extend([
+    '*',  # Permitir todos los hosts temporalmente para healthcheck interno
     'healthcheck.railway.app',  # Railway healthcheck
     '.railway.app',  # Todos los subdominios de railway.app
     '.up.railway.app',  # Dominios de deploy
