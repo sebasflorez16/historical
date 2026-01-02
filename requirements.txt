@@ -23,6 +23,7 @@ google-generativeai==0.3.2
 # Análisis geoespacial y visualización
 folium==0.15.1
 matplotlib==3.8.2
+seaborn==0.13.0
 pandas==2.1.4
 numpy==1.26.2
 geojson==3.1.0
